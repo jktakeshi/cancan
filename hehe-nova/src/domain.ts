@@ -116,4 +116,3 @@ export type AttemptResult = {
 export type AttemptSource =
   | { kind: 'webcam' }
   | { kind: 'fixture'; fixture: LearnerAttemptFixture }
-

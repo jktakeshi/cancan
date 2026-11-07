@@ -44,4 +44,3 @@ export function validateManifest(manifest: RehearsalManifest): string[] {
 
   return errors
 }
-

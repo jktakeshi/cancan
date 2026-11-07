@@ -21,7 +21,6 @@ function solveLinearSystem(matrix: number[][], values: number[]): number[] | nul
   }
   return augmented.map((row) => row[matrix.length])
 }
-
 export function calibrationErrors(calibration: Calibration): string[] {
   const errors: string[] = []
   if (!(calibration.widthM > 0 && calibration.depthM > 0)) errors.push('Floor dimensions must be positive.')

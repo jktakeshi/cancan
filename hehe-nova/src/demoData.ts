@@ -105,4 +105,3 @@ export const demoFixtures: LearnerAttemptFixture[] = [
     expected: { visibility: 'inconclusive', timing: 'inconclusive', formation: 'inconclusive', posture: 'inconclusive', primaryCorrection: 'Move back so both feet stay visible.' },
   },
 ]
-

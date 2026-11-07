@@ -7,7 +7,6 @@ const TARGET_INTERVAL_MS = 1000 / 15
 function toPoseLandmarks(landmarks: NormalizedLandmark[]): PoseLandmark[] {
   return landmarks.map((landmark) => ({ x: landmark.x, y: landmark.y, z: landmark.z, visibility: landmark.visibility ?? 0 }))
 }
-
 export function usePoseInput() {
   const detectorRef = useRef<PoseLandmarker | null>(null)
   const frameRef = useRef<number | null>(null)

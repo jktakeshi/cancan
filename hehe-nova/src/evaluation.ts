@@ -9,7 +9,6 @@ export const evaluationConfig = {
   baseLandingToleranceM: 0.25,
   posturePassScore: 70,
 }
-
 const inconclusive = (reason: string): DimensionResult => ({ status: 'inconclusive', reason })
 const median = (values: number[]) => {
   const sorted = [...values].sort((a, b) => a - b)

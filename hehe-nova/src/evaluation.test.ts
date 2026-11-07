@@ -13,7 +13,6 @@ const role = (id: string, x: number): RoleTarget => ({
   startFloor: { x, y: 0.5 }, pathFloor: [{ x, y: 0.5 }, { x, y: 0.5 }], finishFloor: { x, y: 0.5 },
   poseTargets: [{ count: 8, landmarks: Array.from({ length: 33 }, () => ({ x: 0, y: 0, z: 0, visibility: 1 })) }], movementEvents: [],
 })
-
 function sample(timeMs: number, leftX = 0.45, rightX = 0.55): PoseSample {
   const landmarks: PoseLandmark[] = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, z: 0, visibility: 1 }))
   landmarks[29] = { x: leftX, y: 0.5, z: 0, visibility: 1 }

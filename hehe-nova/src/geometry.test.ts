@@ -23,4 +23,3 @@ describe('floor geometry', () => {
     expect(mapped.y).toBeCloseTo(1.5)
   })
 })
-
