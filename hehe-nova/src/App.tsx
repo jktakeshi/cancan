@@ -1,41 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { demoFixtures, demoManifest } from './demoData'
-import type { AttemptResult, Calibration, DimensionResult, FloorPoint, Phrase, PoseSample, RoleTarget } from './domain'
+import type { AttemptResult, Calibration, DimensionResult, FloorPoint, Phrase, RoleTarget } from './domain'
 import { correctionFor, extractStableLanding, scoreFormation, scorePosture } from './evaluation'
 import { calibrationErrors } from './geometry'
 import { validateManifest } from './manifestValidation'
+import { ReferenceOverlay, SampleOverlay } from './PoseOverlay'
 import { nearestTrackFrame } from './referenceTracking'
+import { videoContentRect, type ContentRect } from './skeleton'
 import { usePoseInput } from './usePoseInput'
 import { useReferenceAnalysis } from './useReferenceAnalysis'
 
-const connections = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [27, 29], [24, 26], [26, 28], [28, 30]]
 const dimension = (status: DimensionResult['status'], reason: string): DimensionResult => ({ status, reason })
 
 function getCount(phrase: Phrase, time: number) {
   let count = 1
   for (const mark of phrase.counts) if (time >= mark.timeSec) count = mark.count
   return count
-}
-
-function getHighlight(role: RoleTarget, time: number) {
-  const frames = [...role.highlights].sort((a, b) => a.timeSec - b.timeSec)
-  const nextIndex = frames.findIndex((frame) => frame.timeSec >= time)
-  if (nextIndex <= 0) return frames[Math.max(0, nextIndex)]
-  if (nextIndex < 0) return frames.at(-1)
-  const previous = frames[nextIndex - 1]
-  const next = frames[nextIndex]
-  const progress = (time - previous.timeSec) / Math.max(next.timeSec - previous.timeSec, 0.001)
-  return { center: { x: previous.center.x + (next.center.x - previous.center.x) * progress, y: previous.center.y + (next.center.y - previous.center.y) * progress }, radius: previous.radius + (next.radius - previous.radius) * progress }
-}
-
-function Skeleton({ sample }: { sample: PoseSample | null }) {
-  if (!sample?.landmarks.length) return null
-  return <svg className="skeleton" viewBox="0 0 1 1" preserveAspectRatio="none">{connections.map(([start, end]) => {
-    const a = sample.landmarks[start]
-    const b = sample.landmarks[end]
-    return a?.visibility >= 0.6 && b?.visibility >= 0.6 ? <line key={`${start}-${end}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} /> : null
-  })}</svg>
 }
 
 function FormationMap({ phrase, role, landing }: { phrase: Phrase; role: RoleTarget; landing?: FloorPoint }) {
@@ -81,8 +62,16 @@ function App() {
   const pose = usePoseInput()
   const referenceAnalysis = useReferenceAnalysis()
   const referenceTrack = referenceAnalysis.tracks.find((track) => track.id === role.id)
-  const trackedRole = referenceTrack ? { ...role, highlights: referenceTrack.frames } : role
-  const highlight = getHighlight(trackedRole, referenceTime)
+  const [pickingDancer, setPickingDancer] = useState(false)
+  const [learnerContent, setLearnerContent] = useState<ContentRect>({ left: 0, top: 0, width: 0, height: 0 })
+  const analyzedUrlRef = useRef('')
+
+  useEffect(() => {
+    // Calibration markers are positioned inside the letterboxed video content, which moves on resize.
+    const measure = () => { if (learnerRef.current) setLearnerContent(videoContentRect(learnerRef.current)) }
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [])
 
   useEffect(() => () => {
     streamRef.current?.getTracks().forEach((track) => track.stop())
@@ -113,8 +102,17 @@ function App() {
 
   const addCalibrationPoint = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!calibrating || calibrationPoints.length >= 4) return
-    const bounds = event.currentTarget.getBoundingClientRect()
-    setCalibrationPoints((points) => [...points, { x: (event.clientX - bounds.left) / bounds.width, y: (event.clientY - bounds.top) / bounds.height }])
+    const video = learnerRef.current
+    if (!video) return
+    // Clicks are measured against the rendered video content, ignoring letterbox bars.
+    const bounds = video.getBoundingClientRect()
+    const content = videoContentRect(video)
+    setLearnerContent(content)
+    const shownX = (event.clientX - bounds.left - content.left) / content.width
+    // Stored coordinates stay unmirrored even when the webcam is shown as a mirror.
+    const point = { x: source === 'webcam' ? 1 - shownX : shownX, y: (event.clientY - bounds.top - content.top) / content.height }
+    if (point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) return
+    setCalibrationPoints((points) => [...points, point])
   }
 
   const saveCalibration = () => {
@@ -192,8 +190,8 @@ function App() {
 
   return <main><nav><b>DC</b><strong>Dance Catch-up</strong><span>functional prototype</span></nav><section className="hero"><div><small>ROLE-AWARE REHEARSAL</small><h1>Learn the dancer, not just the dance.</h1><p>Choose a phrase and role, review the path, then practice timing, formation, and final shape.</p></div><aside><strong>Placeholder data</strong><span>Load the team recordings when ready.</span></aside></section><div className="layout">
     <section className="card sidebar"><small>1 · CHOOSE A PHRASE</small>{demoManifest.phrases.map((item) => <button className={item.id === phrase.id ? 'selected' : ''} onClick={() => choosePhrase(item)} key={item.id}><strong>{item.label}</strong><span>Counts 1–8</span></button>)}<small>2 · CHOOSE A ROLE</small>{phrase.roles.map((item) => <button className={item.id === role.id ? 'selected' : ''} onClick={() => setRoleId(item.id)} key={item.id}><i style={{ background: item.color }} />{item.label}</button>)}<small>TEACHING CHUNKS</small>{phrase.teachingChunks.map((item, index) => <button className={index === chunkIndex ? 'selected' : ''} onClick={() => setChunkIndex(index)} key={item.startCount}><strong>Counts {item.startCount}–{item.endCount}</strong><span>{item.instruction}</span></button>)}</section>
-    <div className="content"><section className="card"><header><div><small>REFERENCE</small><h2>{phrase.label} · {role.label}</h2></div><em>{getCount(phrase, referenceTime)}</em></header><div className="video-stage">{referenceUrl ? <video ref={referenceRef} src={referenceUrl} controls onTimeUpdate={(event) => { const video = event.currentTarget; const end = phrase.counts[chunk.endCount - 1].timeSec + .5; if (loopChunk && video.currentTime >= end) video.currentTime = phrase.counts[chunk.startCount - 1].timeSec; setReferenceTime(video.currentTime) }} /> : <div className="empty"><strong>Reference video pending</strong><span>The interface and evaluator are ready for the recorded asset.</span></div>}{highlight && <div className="highlight" style={{ left: `${(highlight.center.x - highlight.radius) * 100}%`, top: `${(highlight.center.y - highlight.radius) * 100}%`, width: `${highlight.radius * 200}%`, borderColor: role.color }}><span style={{ background: role.color }}>{role.label}</span></div>}</div><div className="controls"><label>Load reference<input type="file" accept="video/*" onChange={(event) => loadLocalFile(event.target.files?.[0], setReferenceUrl)} /></label><button disabled={referenceAnalysis.status === 'analyzing'} onClick={() => referenceRef.current && void referenceAnalysis.analyze(referenceRef.current, phrase.roles.map((item) => item.id))}>{referenceAnalysis.status === 'analyzing' ? `Detecting dancers ${referenceAnalysis.progress}%` : referenceAnalysis.status === 'done' ? 'Re-detect dancers' : 'Auto-detect dancers'}</button><button onClick={() => { if (!referenceRef.current) return; setLoopChunk(true); referenceRef.current.currentTime = phrase.counts[chunk.startCount - 1].timeSec; void referenceRef.current.play() }}>Loop selected counts</button><button onClick={() => { setLoopChunk(false); referenceRef.current?.pause() }}>Stop loop</button></div>{referenceAnalysis.error && <p className="error">{referenceAnalysis.error}</p>}<div className="instruction"><span>Counts {chunk.startCount}–{chunk.endCount}</span><strong>{chunk.instruction}</strong></div></section>
-    <div className="practice"><FormationMap phrase={phrase} role={role} landing={landing} /><section className="card"><header><div><small>PRACTICE</small><h3>{source === 'webcam' ? 'Live webcam' : 'Test attempt'}</h3></div><span>{pose.status}</span></header><div className="tabs"><button className={source === 'fixture' ? 'selected' : ''} onClick={() => setSource('fixture')}>Test video</button><button className={source === 'webcam' ? 'selected' : ''} onClick={() => void startCamera()}>Webcam</button></div>{source === 'fixture' && <><select value={fixtureId} onChange={(event) => chooseFixture(event.target.value)}>{demoFixtures.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select><label className="load">Load attempt video<input type="file" accept="video/*" onChange={(event) => loadLocalFile(event.target.files?.[0], setLearnerUrl)} /></label></>}<div className={`video-stage learner ${calibrating ? 'calibrating' : ''}`} onClick={addCalibrationPoint}><video ref={learnerRef} src={source === 'fixture' ? learnerUrl : undefined} muted playsInline /><Skeleton sample={pose.latest} />{calibrationPoints.map((point, index) => <b className="calibration-point" style={{ left: `${point.x * 100}%`, top: `${point.y * 100}%` }} key={`${point.x}-${point.y}`}>{index + 1}</b>)}{!learnerUrl && source === 'fixture' && <div className="empty"><strong>{fixture.label}</strong><span>Load the corresponding file to test.</span></div>}{liveCount && <div className="live-count">{liveCount}</div>}</div><div className="calibration-controls"><button onClick={() => { setCalibrating(true); setCalibrationPoints([]) }}>Calibrate floor</button>{calibrating && <><input aria-label="Floor width in meters" type="number" min="0.1" step="0.1" value={floorWidth} onChange={(event) => setFloorWidth(event.target.value)} /><input aria-label="Floor depth in meters" type="number" min="0.1" step="0.1" value={floorDepth} onChange={(event) => setFloorDepth(event.target.value)} /><button disabled={calibrationPoints.length !== 4} onClick={saveCalibration}>Save 4 corners</button></>}<span>{calibrating ? `Click near-left, near-right, far-right, far-left (${calibrationPoints.length}/4)` : `${calibration.widthM} × ${calibration.depthM} m floor`}</span></div><button className="primary" disabled={(source === 'fixture' && !learnerUrl) || calibrating} onClick={beginAttempt}>Start / retry attempt</button>{pose.error && <p className="error">{pose.error}</p>}</section></div>
+    <div className="content"><section className="card"><header><div><small>REFERENCE</small><h2>{phrase.label} · {role.label}</h2></div><em>{getCount(phrase, referenceTime)}</em></header><div className="video-stage">{referenceUrl ? <video ref={referenceRef} src={referenceUrl} controls onLoadedData={(event) => { if (analyzedUrlRef.current === referenceUrl) return; analyzedUrlRef.current = referenceUrl; void referenceAnalysis.analyze(event.currentTarget, phrase.roles.map((item) => item.id)) }} onTimeUpdate={(event) => { const video = event.currentTarget; const end = phrase.counts[chunk.endCount - 1].timeSec + .5; if (loopChunk && video.currentTime >= end) video.currentTime = phrase.counts[chunk.startCount - 1].timeSec; setReferenceTime(video.currentTime) }} /> : <div className="empty"><strong>Reference video pending</strong><span>The interface and evaluator are ready for the recorded asset.</span></div>}{referenceUrl && <ReferenceOverlay videoRef={referenceRef} tracks={referenceAnalysis.tracks} roles={phrase.roles} selectedRoleId={role.id} onPickDancer={pickingDancer ? (trackIndex) => { referenceAnalysis.assignRole(role.id, trackIndex); setPickingDancer(false) } : undefined} />}{referenceUrl && referenceAnalysis.status !== 'done' && <div className={`analysis-status ${referenceAnalysis.status}`}>{referenceAnalysis.status === 'analyzing' ? `Finding dancers… ${referenceAnalysis.progress}%${referenceAnalysis.delegate ? ` · ${referenceAnalysis.delegate}` : ''}${referenceAnalysis.delegate === 'CPU' ? ' (slow — enable hardware acceleration in Chrome)' : ''}` : referenceAnalysis.status === 'error' ? `Dancer detection failed: ${referenceAnalysis.error}` : 'Waiting for video…'}</div>}{pickingDancer && <div className="pick-hint">Click the dancer who performs {role.label}</div>}</div><div className="controls"><label>Load reference<input type="file" accept="video/*" onChange={(event) => loadLocalFile(event.target.files?.[0], setReferenceUrl)} /></label><button disabled={referenceAnalysis.status === 'analyzing'} onClick={() => referenceRef.current && void referenceAnalysis.analyze(referenceRef.current, phrase.roles.map((item) => item.id))}>{referenceAnalysis.status === 'analyzing' ? `Detecting dancers ${referenceAnalysis.progress}%` : referenceAnalysis.status === 'done' ? 'Re-detect dancers' : 'Auto-detect dancers'}</button>{referenceAnalysis.tracks.length > 0 && <button className={pickingDancer ? 'active' : ''} onClick={() => { referenceRef.current?.pause(); setPickingDancer((value) => !value) }}>{pickingDancer ? 'Cancel' : `Wrong dancer? Pick ${role.label}`}</button>}<button onClick={() => { if (!referenceRef.current) return; setLoopChunk(true); referenceRef.current.currentTime = phrase.counts[chunk.startCount - 1].timeSec; void referenceRef.current.play() }}>Loop selected counts</button><button onClick={() => { setLoopChunk(false); referenceRef.current?.pause() }}>Stop loop</button></div>{referenceAnalysis.error && <p className="error">{referenceAnalysis.error}</p>}<div className="instruction"><span>Counts {chunk.startCount}–{chunk.endCount}</span><strong>{chunk.instruction}</strong></div></section>
+    <div className="practice"><FormationMap phrase={phrase} role={role} landing={landing} /><section className="card"><header><div><small>PRACTICE</small><h3>{source === 'webcam' ? 'Live webcam' : 'Test attempt'}</h3></div><span>{pose.status}</span></header><div className="tabs"><button className={source === 'fixture' ? 'selected' : ''} onClick={() => setSource('fixture')}>Test video</button><button className={source === 'webcam' ? 'selected' : ''} onClick={() => void startCamera()}>Webcam</button></div>{source === 'fixture' && <><select value={fixtureId} onChange={(event) => chooseFixture(event.target.value)}>{demoFixtures.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select><label className="load">Load attempt video<input type="file" accept="video/*" onChange={(event) => loadLocalFile(event.target.files?.[0], setLearnerUrl)} /></label></>}<div className={`video-stage learner ${calibrating ? 'calibrating' : ''}`} onClick={addCalibrationPoint}><video ref={learnerRef} className={source === 'webcam' ? 'mirrored' : ''} src={source === 'fixture' ? learnerUrl : undefined} muted playsInline onLoadedMetadata={(event) => setLearnerContent(videoContentRect(event.currentTarget))} /><SampleOverlay videoRef={learnerRef} sample={pose.latest} color={role.color} mirrored={source === 'webcam'} />{calibrationPoints.map((point, index) => { const shownX = source === 'webcam' ? 1 - point.x : point.x; return <b className="calibration-point" style={{ left: learnerContent.left + shownX * learnerContent.width, top: learnerContent.top + point.y * learnerContent.height }} key={`${point.x}-${point.y}`}>{index + 1}</b> })}{!learnerUrl && source === 'fixture' && <div className="empty"><strong>{fixture.label}</strong><span>Load the corresponding file to test.</span></div>}{liveCount && <div className="live-count">{liveCount}</div>}</div><div className="calibration-controls"><button onClick={() => { setCalibrating(true); setCalibrationPoints([]) }}>Calibrate floor</button>{calibrating && <><input aria-label="Floor width in meters" type="number" min="0.1" step="0.1" value={floorWidth} onChange={(event) => setFloorWidth(event.target.value)} /><input aria-label="Floor depth in meters" type="number" min="0.1" step="0.1" value={floorDepth} onChange={(event) => setFloorDepth(event.target.value)} /><button disabled={calibrationPoints.length !== 4} onClick={saveCalibration}>Save 4 corners</button></>}<span>{calibrating ? `Click near-left, near-right, far-right, far-left (${calibrationPoints.length}/4)` : `${calibration.widthM} × ${calibration.depthM} m floor`}</span></div><button className="primary" disabled={(source === 'fixture' && !learnerUrl) || calibrating} onClick={beginAttempt}>Start / retry attempt</button>{pose.error && <p className="error">{pose.error}</p>}</section></div>
     {result && <section className="card results"><header><div><small>FEEDBACK</small><h2>{result.primaryCorrection}</h2></div></header><div className="result-grid"><Result label="Visibility" value={result.visibility} /><Result label="Timing" value={result.timing} /><Result label="Footwork" value={result.footwork} /><Result label="Formation" value={result.formation} /><Result label="Posture" value={result.posture} /></div>{landing && <footer><div><small>SAME ATTEMPT, DIFFERENT ROLE</small><p>The landing stays fixed. Only the target changes.</p></div>{phrase.roles.map((item) => <button className={judgedRoleId === item.id ? 'selected' : ''} onClick={() => rescore(item.id)} key={item.id}>Judge as {item.label}</button>)}</footer>}</section>}</div></div></main>
 }
 
