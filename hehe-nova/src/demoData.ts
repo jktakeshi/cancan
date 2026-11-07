@@ -17,7 +17,7 @@ const countMarks = (startSec: number) => Array.from({ length: 8 }, (_, index) =>
 
 export const demoManifest: RehearsalManifest = {
   title: 'Demo rehearsal',
-  frontVideo: '/IMG_9745.MOV',
+  frontVideo: '/rehearsal1.mov',
   placeholder: true,
   referenceCalibration: {
     corners: [

@@ -443,3 +443,59 @@ function compareTravel(samples: PoseSample[], track: ReferenceTrack, phrase: Phr
   if (Math.sign(actual) !== Math.sign(target)) return `Wrong direction: travel to your ${side(target)}, not your ${side(actual)}`
   return Math.abs(actual) < Math.abs(target) * 0.5 ? `Right direction — travel farther to your ${side(target)}` : `Good travel to your ${side(target)}`
 }
+
+/** Summed limb speed of all tracked dancers, in torso lengths per second, sampled every `stepSec`. */
+export function motionEnergy(tracks: ReferenceTrack[], duration: number, aspect: number, stepSec = 0.1): number[] {
+  const joints = [13, 14, 15, 16, 25, 26, 27, 28]
+  const energy: number[] = []
+  for (let time = 0; time <= duration; time += stepSec) {
+    let total = 0
+    for (const track of tracks) {
+      const now = poseAt(track, time)
+      const before = poseAt(track, time - stepSec)
+      const frame = now && bodyFrame(now, aspect)
+      if (!now || !before || !frame) continue
+      let sum = 0
+      for (const joint of joints) sum += Math.hypot((now[joint].x - before[joint].x) * aspect, now[joint].y - before[joint].y)
+      total += sum / joints.length / frame.torso / stepSec
+    }
+    energy.push(total)
+  }
+  return energy
+}
+
+/**
+ * How far the dancers' shapes are from their still opening pose, in torso lengths (mean over
+ * limbs and dancers, body-relative so travel does not count), sampled every `stepSec`.
+ */
+export function poseDeviation(tracks: ReferenceTrack[], duration: number, aspect: number, stepSec = 0.1): number[] {
+  const joints = [13, 14, 15, 16, 25, 26, 27, 28]
+  const relative = (pose: PoseLandmark[]) => {
+    const frame = bodyFrame(pose, aspect)
+    if (!frame) return null
+    return joints.map((joint) => ({ x: (pose[joint].x * aspect - frame.hip.x) / frame.torso, y: (pose[joint].y - frame.hip.y) / frame.torso }))
+  }
+  const openings = tracks.map((track) => {
+    for (let time = 0; time <= Math.min(duration, 2); time += stepSec) {
+      const pose = poseAt(track, time)
+      const shape = pose && relative(pose)
+      if (shape) return shape
+    }
+    return null
+  })
+  const deviation: number[] = []
+  for (let time = 0; time <= duration; time += stepSec) {
+    let total = 0
+    let n = 0
+    tracks.forEach((track, index) => {
+      const opening = openings[index]
+      const pose = poseAt(track, time)
+      const shape = pose && relative(pose)
+      if (!opening || !shape) return
+      total += shape.reduce((sum, point, joint) => sum + Math.hypot(point.x - opening[joint].x, point.y - opening[joint].y), 0) / joints.length
+      n += 1
+    })
+    deviation.push(n ? total / n : 0)
+  }
+  return deviation
+}

@@ -8,7 +8,14 @@ type RoleStyle = { id: string; label: string; color: string }
 type VideoRef = React.RefObject<HTMLVideoElement | null>
 
 /** The selected dancer's foot path for the phrase, with count numbers where each beat lands. */
-export type Trail = { color: string; points: { x: number; y: number }[]; marks: { point: { x: number; y: number }; label: string }[] }
+export type Trail = {
+  color: string
+  points: { x: number; y: number }[]
+  marks: { point: { x: number; y: number }; label: string }[]
+  /** The phrase the path belongs to; it is only drawn while playback is inside it. */
+  startSec: number
+  endSec: number
+}
 
 function drawTrail(ctx: CanvasRenderingContext2D, rect: ContentRect, trail: Trail) {
   if (trail.points.length < 2) return
@@ -29,10 +36,20 @@ function drawTrail(ctx: CanvasRenderingContext2D, rect: ContentRect, trail: Trai
   ctx.font = '800 11px Inter, ui-sans-serif, system-ui, sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
+  // Counts landing on (nearly) the same spot share one marker, labeled as a range ("1–4").
+  const groups: { x: number; y: number; first: string; last: string }[] = []
   for (const mark of trail.marks) {
     const [x, y] = px(mark.point)
+    const last = groups.at(-1)
+    if (last && Math.hypot(last.x - x, last.y - y) < 20) last.last = mark.label
+    else groups.push({ x, y, first: mark.label, last: mark.label })
+  }
+  for (const group of groups) {
+    const mark = { label: group.first === group.last ? group.first : `${group.first}–${group.last}` }
+    const [x, y] = [group.x, group.y]
+    const radius = Math.max(9, 4 + mark.label.length * 3.5)
     ctx.beginPath()
-    ctx.arc(x, y, 9, 0, Math.PI * 2)
+    ctx.arc(x, y, radius, 0, Math.PI * 2)
     ctx.fillStyle = trail.color
     ctx.fill()
     ctx.lineWidth = 2
@@ -75,14 +92,14 @@ export function ReferenceOverlay({ videoRef, tracks, roles, selectedRoleId, trai
       if (!ctx || !video || !video.videoWidth) return
       const rect = videoContentRect(video)
       const time = video.currentTime
-      if (trail) drawTrail(ctx, rect, trail)
+      if (trail && time >= trail.startSec - 0.5 && time <= trail.endSec + 0.5) drawTrail(ctx, rect, trail)
       const ordered = [...tracks].sort((a, b) => Number(a.id === selectedRoleId) - Number(b.id === selectedRoleId))
       for (const track of ordered) {
         const landmarks = poseAt(track, time)
         const role = roles.find((item) => item.id === track.id)
         if (!landmarks || !role) continue
         const emphasis = track.id === selectedRoleId
-        drawSkeleton(ctx, landmarks, rect, { color: role.color, emphasis, label: role.label })
+        drawSkeleton(ctx, landmarks, rect, { color: role.color, emphasis, label: emphasis ? role.label : role.label.replace(/^Dancer /, '') })
       }
     }
     frame = requestAnimationFrame(render)

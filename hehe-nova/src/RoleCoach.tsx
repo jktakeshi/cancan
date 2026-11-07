@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Phrase, PoseLandmark, RoleTarget } from './domain'
+import { cameraFor, floorConfig, floorPosition, learnerView, mappingFor, moveInstruction, reviewPositions, toLearnerFloor, trackFloorAt, type Camera, type CountPosition, type FloorPoint, type LearnerView } from './floor'
+import { FloorRadar } from './FloorGuide'
+import { drawFloorGuide, drawFormationHologram, rolePath, type Dancer } from './floorDrawing'
+import { formationPositionsAt, type Formation } from './formations'
+import { FormationDiagram } from './FormationsPanel'
 import { fitPoseToBox, retargetPose, reviewTake, teachPhrase, type TakeReview } from './movement'
 import { poseAt, type ReferenceTrack } from './referenceTracking'
 import { drawSkeleton, prepareCanvas, videoContentRect } from './skeleton'
@@ -7,16 +12,31 @@ import { usePoseInput } from './usePoseInput'
 import './RoleCoach.css'
 
 type VideoRef = React.RefObject<HTMLVideoElement | null>
-type Props = { phrase: Phrase; role: RoleTarget; track: ReferenceTrack | undefined; referenceRef: VideoRef; analysisDone: boolean }
+type Props = {
+  phrase: Phrase
+  role: RoleTarget
+  track: ReferenceTrack | undefined
+  /** Every tracked dancer with their role, for formation views. */
+  dancers: Dancer[]
+  referenceRef: VideoRef
+  analysisDone: boolean
+  /** When set, practice shows the formation hologram instead of the choreography overlays. */
+  formationGuide: { formations: Formation[]; dancerId: string } | null
+  /** Reference camera model (calibrated to the floor when possible). */
+  referenceCamera: Camera
+}
 type TakePhase = 'idle' | 'countdown' | 'recording' | 'review'
 
 const LEARNER_COLOR = '#ffffff'
 const SPEEDS = [0.5, 0.75, 1]
+const FLOOR_SCALES = [1, 0.75, 0.5]
+/** Counts of music played before count 1 when a take starts (the "5, 6, 7, 8"). */
+const LEAD_IN_COUNTS = 4
 
 /** Reference playback time, refreshed every animation frame while it changes. */
 function useVideoTime(videoRef: VideoRef) {
   const [time, setTime] = useState(0)
-  const [aspect, setAspect] = useState(16 / 9)
+  const [size, setSize] = useState({ width: 1280, height: 720 })
   useEffect(() => {
     let frame = 0
     let last = -1
@@ -28,12 +48,12 @@ function useVideoTime(videoRef: VideoRef) {
         last = video.currentTime
         setTime(video.currentTime)
       }
-      if (video.videoWidth && video.videoHeight) setAspect(video.videoWidth / video.videoHeight)
+      if (video.videoWidth && video.videoHeight) setSize((current) => (current.width === video.videoWidth && current.height === video.videoHeight ? current : { width: video.videoWidth, height: video.videoHeight }))
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
   }, [videoRef])
-  return { time, aspect }
+  return { time, aspect: size.width / size.height, size }
 }
 
 /** The selected dancer alone, centered and enlarged, following reference playback. */
@@ -86,8 +106,10 @@ function visibilityMessage(landmarks: PoseLandmark[] | undefined) {
 
 const scoreClass = (score: number | null) => (score === null ? 'none' : score >= 80 ? 'good' : score >= 60 ? 'ok' : 'bad')
 
-export function RoleCoach({ phrase, role, track, referenceRef, analysisDone }: Props) {
+export function RoleCoach({ phrase, role, track, dancers, referenceRef, analysisDone, formationGuide, referenceCamera }: Props) {
   const { time, aspect } = useVideoTime(referenceRef)
+  const self: Dancer | null = track ? { track, role } : null
+  const others = useMemo(() => dancers.filter((dancer) => dancer.track !== track), [dancers, track])
   const lessons = useMemo(() => teachPhrase(track, phrase, aspect), [track, phrase, aspect])
   const [mirrored, setMirrored] = useState(true)
   const [speed, setSpeed] = useState(0.75)
@@ -129,6 +151,58 @@ export function RoleCoach({ phrase, role, track, referenceRef, analysisDone }: P
   const [selectedCount, setSelectedCount] = useState<number | null>(null)
   const setPhase = (phase: TakePhase) => { takePhaseRef.current = phase; setTakePhase(phase) }
 
+  // ---- floor guidance --------------------------------------------------------------------------
+  const [showFloor, setShowFloor] = useState(true)
+  const [floorScale, setFloorScale] = useState(1)
+  /** The learner's start spot and the webcam geometry solved there. */
+  const [anchor, setAnchor] = useState<{ spot: FloorPoint; view: LearnerView } | null>(null)
+  const [positions, setPositions] = useState<CountPosition[]>([])
+  const mapping = useMemo(() => (anchor && track ? mappingFor(track, phrase, referenceCamera, anchor.spot, floorScale) : null), [anchor, track, phrase, referenceCamera, floorScale])
+  const path = useMemo(() => (track ? rolePath(track, phrase, referenceCamera) : []), [track, phrase, referenceCamera])
+
+  // Formation mode: the learner's start spot is their own dancer's spot at the phrase start.
+  const formationRoom = useMemo(() => {
+    if (!formationGuide || !anchor) return null
+    const start = formationPositionsAt(phrase.startSec, formationGuide.formations)?.positions[formationGuide.dancerId]
+    return start ? { anchor: anchor.spot, origin: start, scale: floorScale } : null
+  }, [formationGuide, anchor, phrase.startSec, floorScale])
+  /** Formation spots in the learner's room at a reference time. */
+  const formationTargets = (timeSec: number) => {
+    if (!formationGuide || !formationRoom) return null
+    const { formations, dancerId } = formationGuide
+    const state = formationPositionsAt(timeSec, formations)
+    const mine = state?.positions[dancerId]
+    if (!state || !mine) return null
+    const countSec = phrase.counts[1].timeSec - phrase.counts[0].timeSec
+    // Show the next spot during a transition, or up to two counts before a change begins.
+    const upcoming = state.from !== state.to ? state.next : state.next && state.next.startSec - timeSec <= countSec * 2 + 0.1 ? state.next : null
+    const nextMine = upcoming ? upcoming.positions[dancerId] : null
+    return {
+      target: toLearnerFloor(mine, formationRoom),
+      next: nextMine ? toLearnerFloor(nextMine, formationRoom) : null,
+      others: Object.entries(state.positions).filter(([id]) => id !== dancerId).map(([id, point]) => {
+        const owner = dancers.find((dancer) => dancer.track.id === id)
+        return { label: owner?.role.label.replace(/^Dancer /, '') ?? id, spot: toLearnerFloor(point, formationRoom), pose: owner ? poseAt(owner.track, timeSec) : null }
+      }),
+    }
+  }
+  const learnerCamera = () => {
+    const webcam = webcamRef.current
+    return cameraFor(webcam?.videoWidth || 1280, webcam?.videoHeight || 720, floorConfig.learnerHfovDeg)
+  }
+  /** Use where the learner stands now as the role's start spot. */
+  const markStartSpot = () => {
+    const landmarks = pose.latest?.landmarks
+    if (!landmarks?.length) return null
+    const camera = learnerCamera()
+    const spot = floorPosition(landmarks, camera, 0.5)
+    const view = learnerView(landmarks, camera)
+    if (!spot || !view) return null
+    const next = { spot, view }
+    setAnchor(next)
+    return next
+  }
+
   const stopCamera = () => {
     pose.stop()
     streamRef.current?.getTracks().forEach((item) => item.stop())
@@ -166,7 +240,12 @@ export function RoleCoach({ phrase, role, track, referenceRef, analysisDone }: P
     const webcam = webcamRef.current
     const nextAspect = webcam?.videoWidth && webcam.videoHeight ? webcam.videoWidth / webcam.videoHeight : learnerAspect
     setLearnerAspect(nextAspect)
-    if (track) setReview(reviewTake([...pose.samplesRef.current], track, phrase, aspect, nextAspect))
+    const samples = [...pose.samplesRef.current]
+    if (track) setReview(reviewTake(samples, track, phrase, aspect, nextAspect))
+    const targetAt = formationGuide
+      ? (timeSec: number) => formationTargets(timeSec)?.target ?? null
+      : (timeSec: number) => { const reference = track && mapping ? trackFloorAt(track, timeSec, referenceCamera) : null; return reference && mapping ? toLearnerFloor(reference, mapping) : null }
+    setPositions(reviewPositions(samples, phrase, learnerCamera(), targetAt))
     setSelectedCount(null)
     setPhase('review')
   }
@@ -179,9 +258,11 @@ export function RoleCoach({ phrase, role, track, referenceRef, analysisDone }: P
     setReview(null)
     setPhase('countdown')
     video.pause()
-    const beatSec = phrase.counts[1].timeSec - phrase.counts[0].timeSec
-    // Start two beats early so the music leads into count one.
-    const leadSec = Math.min(phrase.startSec, beatSec * 2)
+    const countSec = phrase.counts[1].timeSec - phrase.counts[0].timeSec
+    // Start on the count-in so the music leads into count one ("5, 6, 7, 8").
+    const leadSec = Math.min(phrase.startSec, countSec * LEAD_IN_COUNTS)
+    // The learner's spot at the start of a take is where the role starts.
+    markStartSpot()
     video.currentTime = phrase.startSec - leadSec
     ;[3, 2, 1].forEach((value, index) => timersRef.current.push(window.setTimeout(() => setCountdown(value), index * 700)))
     timersRef.current.push(window.setTimeout(() => {
@@ -232,13 +313,35 @@ export function RoleCoach({ phrase, role, track, referenceRef, analysisDone }: P
     if (takePhaseRef.current !== 'recording' && pose.samplesRef.current.length > 300) pose.trimSamples(30)
     const rect = videoContentRect(webcam)
     const webcamAspect = webcam.videoWidth / Math.max(1, webcam.videoHeight)
-    const reference = track && referenceRef.current ? poseAt(track, referenceRef.current.currentTime) : null
+    const now = referenceRef.current?.currentTime ?? 0
+    const learnerHere = anchor ? floorPosition(pose.latest.landmarks, anchor.view.camera, 0.5) : null
+    if (formationGuide) {
+      // Formations are learned on their own: no choreography path and no body ghost.
+      const targets = anchor && formationTargets(now)
+      if (targets) drawFormationHologram(ctx, { rect, view: anchor.view, referenceCamera, mirrored: true, ...targets, learnerSpot: learnerHere, pulse: (performance.now() / 1200) % 1 })
+      drawSkeleton(ctx, pose.latest.landmarks, rect, { color: LEARNER_COLOR, emphasis: false, mirrored: true, minVisibility: 0.5, alpha: 0.95 })
+      return
+    }
+    if (showFloor && anchor && mapping && track) {
+      drawFloorGuide(ctx, { rect, view: anchor.view, mapping, referenceCamera, phrase, time: now, self: { track, role }, path, others, learnerSpot: floorPosition(pose.latest.landmarks, anchor.view.camera, 0.5), mirrored: true })
+    }
+    const reference = track && referenceRef.current ? poseAt(track, now) : null
     const ghost = showGhost && reference ? retargetPose(reference, aspect, pose.latest.landmarks, webcamAspect) : null
     if (ghost) drawSkeleton(ctx, ghost, rect, { color: role.color, emphasis: true, mirrored: true, minVisibility: 0.3, alpha: 0.6 })
     drawSkeleton(ctx, pose.latest.landmarks, rect, { color: LEARNER_COLOR, emphasis: false, mirrored: true, minVisibility: 0.5, alpha: 0.95 })
-  }, [pose, showGhost, track, referenceRef, aspect, role.color])
+  })
 
   const visibility = visibilityMessage(pose.latest?.landmarks)
+  const learnerSpot = anchor && pose.latest?.landmarks.length ? floorPosition(pose.latest.landmarks, anchor.view.camera, 0.5) : null
+  const targetNow = track && mapping ? trackFloorAt(track, time, referenceCamera) : null
+  const formationNow = formationGuide ? formationTargets(time) : null
+  const moveHint = formationGuide
+    ? (learnerSpot && formationNow ? moveInstruction(learnerSpot, formationNow.target) ?? '✓ You are on your formation spot' : null)
+    : learnerSpot && targetNow && mapping ? moveInstruction(learnerSpot, toLearnerFloor(targetNow, mapping)) : null
+  const learnerOnStage = formationRoom && learnerSpot ? { x: formationRoom.origin.x + (learnerSpot.x - formationRoom.anchor.x) / formationRoom.scale, z: formationRoom.origin.z + (learnerSpot.z - formationRoom.anchor.z) / formationRoom.scale } : null
+  const countInLabel = takePhase === 'recording' && time < phrase.startSec - 0.02
+    ? 9 - Math.min(LEAD_IN_COUNTS, Math.ceil((phrase.startSec - time) / (phrase.counts[1].timeSec - phrase.counts[0].timeSec) - 0.01))
+    : null
   const reviewCount = review?.counts.find((item) => item.count === selectedCount) ?? null
 
   if (!analysisDone || !track) {
@@ -267,6 +370,7 @@ export function RoleCoach({ phrase, role, track, referenceRef, analysisDone }: P
           </button>
         </li>)}
         <li className="lesson-note">Cues are measured automatically from the dancer’s pose; “left/right” mean your own left/right while facing the camera. The dashed line on the video is the dancer’s foot path.</li>
+        {self && <li className="radar-box"><FloorRadar videoRef={referenceRef} phrase={phrase} self={self} others={others} referenceCamera={referenceCamera} mapping={null} learnerSpot={null} /><span>Formation from above (mirrored like your webcam). Big dot is {role.label}; the dashed line is its path over this phrase.</span></li>}
       </ol>
     </div>
 
@@ -281,9 +385,18 @@ export function RoleCoach({ phrase, role, track, referenceRef, analysisDone }: P
         {!cameraOn && <div className="webcam-empty">Camera is off</div>}
         {cameraOn && <div className={`visibility ${visibility.ok ? 'ok' : 'warn'}`}>{pose.status === 'loading' ? 'Loading pose model…' : visibility.text}</div>}
         {countdown !== null && <div className="big-count">{countdown}</div>}
-        {takePhase === 'recording' && activeCount && <div className="big-count live">{activeCount}</div>}
+        {takePhase === 'recording' && (countInLabel ?? activeCount) && <div className={`big-count live ${countInLabel ? 'count-in' : ''}`}>{countInLabel ?? activeCount}</div>}
+        {cameraOn && (showFloor || formationGuide) && moveHint && <div className={`move-hint ${formationGuide ? 'formation' : ''}`}>{moveHint}</div>}
+        {formationGuide && <div className="mode-badge">FORMATION MODE · dancer {formationGuide.dancerId ?? '?'}</div>}
       </div>
       <div className="take-panel">
+        {formationGuide && <div className="formation-practice"><FormationDiagram videoRef={referenceRef} formations={formationGuide.formations} roles={dancers.map((dancer) => dancer.role)} dancerId={formationGuide.dancerId} learner={learnerOnStage} /><span>{anchor ? 'Green is your spot, grey are the others, white ring is you (seen from above, front at the bottom).' : 'Stand on your starting spot for this phrase and press “Set start spot”.'}</span></div>}
+        {!formationGuide && self && <div className="radar-box"><FloorRadar videoRef={referenceRef} phrase={phrase} self={self} others={others} referenceCamera={referenceCamera} mapping={mapping} learnerSpot={learnerSpot} /><span>{anchor ? 'Your room from above: white ring is you, the big dot is where you should be now.' : 'Stand on your start spot and press “Set start spot” to place the formation in your room.'}</span></div>}
+        <div className="coach-buttons">
+          <button className="strong" disabled={!cameraOn || !visibility.ok} onClick={() => markStartSpot()}>{anchor ? 'Reset start spot' : 'Set start spot'}</button>
+          {!formationGuide && <button className={showFloor ? 'on' : ''} onClick={() => setShowFloor((value) => !value)}>Floor marks</button>}
+          {FLOOR_SCALES.map((value) => <button key={value} className={floorScale === value ? 'on' : ''} title="Shrink the stage to fit your room" onClick={() => setFloorScale(value)}>{value === 1 ? 'Full stage' : `${value * 100}% stage`}</button>)}
+        </div>
         <p className="muted">Stand where the camera sees your whole body, facing the screen. You’ll get a 3-2-1, then the music plays from just before count 1 at {speed}× speed. Follow the {role.label} figure; the {showGhost ? 'colored ghost on your body shows where your limbs should be' : 'ghost is hidden'}.</p>
         <div className="coach-buttons">
           {takePhase === 'countdown' || takePhase === 'recording'
@@ -297,11 +410,12 @@ export function RoleCoach({ phrase, role, track, referenceRef, analysisDone }: P
           <div className="review-head"><strong className={`score ${scoreClass(review.score)}`}>{review.score ?? '–'}</strong><p>{review.headline}</p></div>
           {review.timing && <p className="review-line">⏱ {review.timing}</p>}
           {review.travel && <p className="review-line">↔ {review.travel}</p>}
+          {(() => { const placed = positions.filter((entry) => entry.errorM !== null); if (!placed.length) return null; const onSpot = placed.filter((entry) => !entry.instruction).length; const worst = placed.reduce((a, b) => (b.errorM! > a.errorM! ? b : a)); return <p className="review-line">📍 On your floor spot for {onSpot}/{placed.length} counts{worst.instruction ? ` · biggest miss on count ${worst.count}: ${worst.instruction.charAt(0).toLowerCase()}${worst.instruction.slice(1)}` : ''}</p> })()}
           <ol className="count-scores">
             {review.counts.map((item) => <li key={item.count}><button className={selectedCount === item.count ? 'on' : ''} onClick={() => { setSelectedCount(item.count); if (referenceRef.current) { referenceRef.current.pause(); referenceRef.current.currentTime = item.timeSec + 0.08 } }}>
               <b>{item.count}</b>
               <i className={scoreClass(item.score)} style={{ width: `${item.score ?? 0}%` }} />
-              <span>{item.correction}</span>
+              <span>{item.correction}{(() => { const place = positions.find((entry) => entry.count === item.count); return place?.errorM == null ? null : <em className={place.instruction ? 'off-spot' : 'on-spot'}>{place.instruction ? ` · 📍 ${place.instruction}` : ' · 📍 on your spot'}</em> })()}</span>
             </button></li>)}
           </ol>
           {reviewCount && <div className="compare">

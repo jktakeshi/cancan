@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PoseLandmark } from './domain'
-import { analysisCrops, appendTrackedFrame, dedupeDetections, detectionFromLandmarks, focusCrop, landmarksFromCrop, missingTracks, poseAt, reassignRole, sampleAppearance, type Appearance, type ReferenceTrack } from './referenceTracking'
+import { analysisCrops, appendTrackedFrame, bestAssignment, finalizeTracks, plausibleBody, reassignSegment, dedupeDetections, detectionFromLandmarks, focusCrop, landmarksFromCrop, missingTracks, poseAt, reassignRole, sampleAppearance, type Appearance, type ReferenceTrack } from './referenceTracking'
 import { containRect } from './skeleton'
 
 function pose(x: number, scale: number): PoseLandmark[] {
@@ -9,6 +9,10 @@ function pose(x: number, scale: number): PoseLandmark[] {
   landmarks[24] = { x: x + 0.01, y: 0.6, z: 0, visibility: 1 }
   landmarks[11] = { x: x - 0.02, y: 0.6 - scale, z: 0, visibility: 1 }
   landmarks[12] = { x: x + 0.02, y: 0.6 - scale, z: 0, visibility: 1 }
+  landmarks[25] = { x: x - 0.01, y: 0.6 + scale * 0.9, z: 0, visibility: 1 }
+  landmarks[26] = { x: x + 0.01, y: 0.6 + scale * 0.9, z: 0, visibility: 1 }
+  landmarks[27] = { x: x - 0.01, y: 0.6 + scale * 1.8, z: 0, visibility: 1 }
+  landmarks[28] = { x: x + 0.01, y: 0.6 + scale * 1.8, z: 0, visibility: 1 }
   return landmarks
 }
 
@@ -108,5 +112,66 @@ describe('detector crops', () => {
 describe('video content rectangle', () => {
   it('pillarboxes a 16:9 video inside a 4:3 box', () => {
     expect(containRect(400, 300, 1280, 720)).toEqual({ left: 0, top: 37.5, width: 400, height: 225 })
+  })
+})
+
+describe('optimal assignment', () => {
+  it('matches the global optimum, not the greedy choice', () => {
+    // Greedy would give track 0 detection 0 (cost 0.1), forcing track 1 onto cost 2.0.
+    expect(bestAssignment([[0.1, 0.5], [0.2, 2.0]], 2)).toEqual([1, 0])
+  })
+
+  it('leaves a track unmatched when every option is too expensive', () => {
+    expect(bestAssignment([[5, Infinity], [0.3, 0.4]], 2)).toEqual([null, 0])
+  })
+
+  it('handles a dozen dancers quickly', () => {
+    const n = 13
+    const costs = Array.from({ length: 12 }, (_, row) => Array.from({ length: n }, (_, column) => (row === column ? 0.05 : 1 + ((row * 7 + column * 3) % 5) / 10)))
+    const started = performance.now()
+    const result = bestAssignment(costs, n)
+    expect(result).toEqual(Array.from({ length: 12 }, (_, index) => index))
+    expect(performance.now() - started).toBeLessThan(50)
+  })
+})
+
+describe('choosing the real dancers', () => {
+  it('rejects a pose with no legs (a bag on the floor)', () => {
+    const bag = pose(0.9, 0.05)
+    for (const joint of [25, 26, 27, 28]) bag[joint] = { ...bag[23], visibility: 0.2 }
+    expect(plausibleBody(bag)).toBe(false)
+    expect(plausibleBody(pose(0.5, 0.2))).toBe(true)
+  })
+
+  it('drops still objects, stitches split tracks, and numbers dancers left to right', () => {
+    const moving = (x0: number, from: number, to: number, id: string) => ({
+      id,
+      frames: Array.from({ length: Math.round((to - from) / 0.1) }, (_, i) => {
+        const t = from + i * 0.1
+        const x = x0 + 0.02 * Math.sin(t * 6)
+        return { timeSec: Number(t.toFixed(2)), center: { x, y: 0.6 }, radius: 0.2, scale: 0.2, landmarks: pose(x, 0.2) }
+      }),
+    })
+    const still = { id: 'bag', frames: Array.from({ length: 50 }, (_, i) => ({ timeSec: i * 0.1, center: { x: 0.95, y: 0.6 }, radius: 0.2, scale: 0.2, landmarks: pose(0.95, 0.2) })) }
+    // One dancer's track breaks at 2 s and resumes at 2.5 s nearby.
+    const result = finalizeTracks([moving(0.7, 0, 2, 'x'), still, moving(0.3, 0, 5, 'y'), moving(0.7, 2.5, 5, 'z')], ['d1', 'd2'])
+    expect(result.map((track) => track.id)).toEqual(['d1', 'd2'])
+    expect(result[0].frames[0].center.x).toBeCloseTo(0.3, 1)
+    expect(result[1].frames.at(-1)!.timeSec).toBeGreaterThan(4.5)
+    expect(result[1].frames[0].timeSec).toBe(0)
+  })
+})
+
+describe('per-stretch manual fixes', () => {
+  const frame = (t: number, x: number, segment: number) => ({ timeSec: t, center: { x, y: 0.6 }, radius: 0.1, scale: 0.2, landmarks: pose(x, 0.2), segment })
+  it('moves only the clicked stretch and swaps what the role held then', () => {
+    // Track a: stretch 1 (0–1 s) is really dancer b; track b holds someone else then.
+    const tracks = [
+      { id: 'a', frames: [frame(0, 0.2, 1), frame(1, 0.2, 1), frame(2, 0.3, 2), frame(3, 0.3, 2)] },
+      { id: 'b', frames: [frame(0, 0.8, 3), frame(1, 0.8, 3), frame(2, 0.7, 4), frame(3, 0.7, 4)] },
+    ]
+    const fixed = reassignSegment(tracks, 'b', 0, 0.5)
+    expect(fixed[1].frames.map((f) => f.center.x)).toEqual([0.2, 0.2, 0.7, 0.7])
+    expect(fixed[0].frames.map((f) => f.center.x)).toEqual([0.8, 0.8, 0.3, 0.3])
   })
 })

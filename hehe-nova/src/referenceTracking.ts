@@ -15,7 +15,7 @@ import { interpolatePose } from './skeleton'
 export type Rgb = [number, number, number]
 
 /** Median clothing colors in [0,1]; a region is null when its joints were not reliable. */
-export type Appearance = { torso: Rgb | null; legs: Rgb | null }
+export type Appearance = { torso: Rgb | null; legs: Rgb | null; shins?: Rgb | null }
 
 export type ReferenceDetection = {
   center: { x: number; y: number }
@@ -29,6 +29,8 @@ export type ReferenceTrackFrame = HighlightKeyframe & {
   /** Hip-to-shoulder length in normalized video units. */
   scale: number
   landmarks: PoseLandmark[]
+  /** Which unambiguous stretch (tracklet) this frame came from; manual fixes move whole stretches. */
+  segment?: number
 }
 
 export type ReferenceTrack = {
@@ -52,6 +54,14 @@ export const trackingConfig = {
   maxAppearanceDistance: 0.2,
   /** Interpolate a track across gaps up to this long; longer gaps hide the figure. */
   maxInterpolationGapSec: 0.45,
+  /** Mean confidence of shoulders, hips, knees, and ankles needed to accept a detection. */
+  minBodyVisibility: 0.45,
+  /** Candidate tracks kept during analysis, per expected dancer, before the best are chosen. */
+  candidatesPerDancer: 2,
+  /** A dancer moves: tracks whose limbs and hips barely move (bags, chairs) are dropped. */
+  minMotion: 0.35,
+  /** Fragments of one dancer separated by up to this long are stitched together. */
+  stitchGapSec: 2.5,
 }
 
 function visible(landmark: PoseLandmark | undefined) {
@@ -66,10 +76,30 @@ export function detectionFromLandmarks(landmarks: PoseLandmark[], appearance?: A
   const leftShoulder = landmarks[11]
   const rightShoulder = landmarks[12]
   if (![leftHip, rightHip, leftShoulder, rightShoulder].every(visible)) return null
+  if (!plausibleBody(landmarks)) return null
   const center = { x: (leftHip.x + rightHip.x) / 2, y: (leftHip.y + rightHip.y) / 2 }
   const shoulderCenter = { x: (leftShoulder.x + rightShoulder.x) / 2, y: (leftShoulder.y + rightShoulder.y) / 2 }
   const scale = Math.max(0.01, Math.hypot(center.x - shoulderCenter.x, center.y - shoulderCenter.y))
   return { center, scale, radius: Math.max(0.055, Math.min(0.18, scale * 1.7)), landmarks, appearance }
+}
+
+/**
+ * Reject detections that are not a person: bags, chairs, and reflections often get a pose with
+ * weak leg confidence or impossible proportions (checked in normalized image units).
+ */
+export function plausibleBody(landmarks: PoseLandmark[]) {
+  const core = [11, 12, 23, 24, 25, 26, 27, 28]
+  if (meanVisibility(core.map((index) => landmarks[index])) < trackingConfig.minBodyVisibility) return false
+  const mid = (a: PoseLandmark, b: PoseLandmark) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
+  const shoulder = mid(landmarks[11], landmarks[12])
+  const hip = mid(landmarks[23], landmarks[24])
+  const ankle = mid(landmarks[27], landmarks[28])
+  const torso = Math.hypot(shoulder.x - hip.x, shoulder.y - hip.y)
+  if (torso < 0.015) return false
+  const leg = Math.hypot(hip.x - ankle.x, hip.y - ankle.y) / torso
+  const shoulders = Math.hypot(landmarks[11].x - landmarks[12].x, landmarks[11].y - landmarks[12].y) / torso
+  // Legs between ~0.6 and 3 torso lengths (crouching to fully extended); shoulders narrower than ~1.4 torsos.
+  return leg > 0.6 && leg < 3 && shoulders < 1.4
 }
 
 const TORSO_JOINTS = [11, 12, 23, 24]
@@ -125,7 +155,13 @@ export function sampleAppearance(landmarks: PoseLandmark[], pixel: (x: number, y
     if (!visible(landmarks[hip]) || !visible(landmarks[knee])) continue
     for (const t of [0.3, 0.5, 0.7]) legPoints.push({ x: lerp(landmarks[hip].x, landmarks[knee].x, t), y: lerp(landmarks[hip].y, landmarks[knee].y, t) })
   }
-  return { torso, legs: median(collect(legPoints)) }
+  // Shins and shoes separate otherwise similar outfits (e.g. white vs black pants).
+  const shinPoints: { x: number; y: number }[] = []
+  for (const [knee, ankle] of [[25, 27], [26, 28]] as const) {
+    if (!visible(landmarks[knee]) || !visible(landmarks[ankle])) continue
+    for (const t of [0.35, 0.6, 0.85]) shinPoints.push({ x: lerp(landmarks[knee].x, landmarks[ankle].x, t), y: lerp(landmarks[knee].y, landmarks[ankle].y, t) })
+  }
+  return { torso, legs: median(collect(legPoints)), shins: median(collect(shinPoints)) }
 }
 
 const rgbDistance = (a: Rgb, b: Rgb) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) / Math.sqrt(3)
@@ -136,6 +172,7 @@ export function appearanceDistance(a: Appearance | undefined, b: Appearance | un
   const parts: number[] = []
   if (a.torso && b.torso) parts.push(rgbDistance(a.torso, b.torso))
   if (a.legs && b.legs) parts.push(rgbDistance(a.legs, b.legs))
+  if (a.shins && b.shins) parts.push(rgbDistance(a.shins, b.shins))
   return parts.length ? parts.reduce((sum, value) => sum + value, 0) / parts.length : null
 }
 
@@ -145,7 +182,7 @@ function blendAppearance(model: Appearance | undefined, observed: Appearance, ra
     if (!b) return a
     return [lerp(a[0], b[0], rate), lerp(a[1], b[1], rate), lerp(a[2], b[2], rate)]
   }
-  return { torso: mix(model?.torso, observed.torso), legs: mix(model?.legs, observed.legs) }
+  return { torso: mix(model?.torso, observed.torso), legs: mix(model?.legs, observed.legs), shins: mix(model?.shins, observed.shins ?? null) }
 }
 
 function predictedCenter(frames: ReferenceTrackFrame[], timeSec: number) {
@@ -170,34 +207,62 @@ export function assignmentCost(track: ReferenceTrack, detection: ReferenceDetect
   return trackingConfig.motionWeight * motion + trackingConfig.scaleWeight * scaleChange + trackingConfig.appearanceWeight * (appearance ?? 0.15)
 }
 
-/** Exhaustive minimum-cost matching; role and dancer counts are small, so this stays cheap and exact. */
-function bestAssignment(costs: number[][], detectionCount: number): (number | null)[] {
-  let best: (number | null)[] = costs.map(() => null)
-  let bestCost = Infinity
-  const used = new Set<number>()
-  const current: (number | null)[] = []
-  const search = (trackIndex: number, total: number) => {
-    if (total >= bestCost) return
-    if (trackIndex === costs.length) {
-      bestCost = total
-      best = [...current]
-      return
+/**
+ * Minimum-cost assignment of tracks to detections (Hungarian algorithm, O(n³)), where any track
+ * may instead stay unmatched for `unmatchedCost`. Scales to a dozen or more dancers.
+ */
+export function bestAssignment(costs: number[][], detectionCount: number): (number | null)[] {
+  const tracks = costs.length
+  if (!tracks) return []
+  // Square matrix: real detections, then one "stay unmatched" column per track.
+  const size = tracks + detectionCount
+  const blocked = 1e9
+  const cost = (row: number, column: number) => {
+    if (row >= tracks) return 0
+    if (column < detectionCount) {
+      const value = costs[row][column]
+      return Number.isFinite(value) && value <= trackingConfig.unmatchedCost ? value : blocked
     }
-    for (let detectionIndex = 0; detectionIndex < detectionCount; detectionIndex += 1) {
-      const cost = costs[trackIndex][detectionIndex]
-      if (used.has(detectionIndex) || cost > trackingConfig.unmatchedCost) continue
-      used.add(detectionIndex)
-      current.push(detectionIndex)
-      search(trackIndex + 1, total + cost)
-      current.pop()
-      used.delete(detectionIndex)
-    }
-    current.push(null)
-    search(trackIndex + 1, total + trackingConfig.unmatchedCost)
-    current.pop()
+    return column - detectionCount === row ? trackingConfig.unmatchedCost : blocked
   }
-  search(0, 0)
-  return best
+  // Jonker-style potentials formulation, 1-indexed.
+  const u = new Float64Array(size + 1)
+  const v = new Float64Array(size + 1)
+  const owner = new Int32Array(size + 1)
+  const way = new Int32Array(size + 1)
+  for (let row = 1; row <= size; row += 1) {
+    owner[0] = row
+    let column0 = 0
+    const minimum = new Float64Array(size + 1).fill(Infinity)
+    const used = new Uint8Array(size + 1)
+    do {
+      used[column0] = 1
+      const row0 = owner[column0]
+      let delta = Infinity
+      let column1 = 0
+      for (let column = 1; column <= size; column += 1) {
+        if (used[column]) continue
+        const reduced = cost(row0 - 1, column - 1) - u[row0] - v[column]
+        if (reduced < minimum[column]) { minimum[column] = reduced; way[column] = column0 }
+        if (minimum[column] < delta) { delta = minimum[column]; column1 = column }
+      }
+      for (let column = 0; column <= size; column += 1) {
+        if (used[column]) { u[owner[column]] += delta; v[column] -= delta } else minimum[column] -= delta
+      }
+      column0 = column1
+    } while (owner[column0] !== 0)
+    do {
+      const column1 = way[column0]
+      owner[column0] = owner[column1]
+      column0 = column1
+    } while (column0)
+  }
+  const result: (number | null)[] = new Array(tracks).fill(null)
+  for (let column = 1; column <= size; column += 1) {
+    const row = owner[column] - 1
+    if (row >= 0 && row < tracks && column - 1 < detectionCount && cost(row, column - 1) < blocked) result[row] = column - 1
+  }
+  return result
 }
 
 const toFrame = (detection: ReferenceDetection, timeSec: number): ReferenceTrackFrame => ({ timeSec, center: detection.center, radius: detection.radius, scale: detection.scale, landmarks: detection.landmarks })
@@ -232,15 +297,39 @@ export function appendTrackedFrame(
     if (detection.appearance && isolated) track.appearance = blendAppearance(track.appearance, detection.appearance, trackingConfig.appearanceRate)
   })
 
-  // Dancers who were not visible when tracking began claim the remaining role IDs, left to right.
-  const freeIds = roleIds.filter((id) => !next.some((track) => track.id === id))
+  // New people start candidate tracks; `finalizeTracks` later keeps the real dancers. A cap keeps a
+  // flood of false detections from slowing tracking down.
   const unclaimed = detections.filter((_, index) => !claimed.has(index)).sort((a, b) => a.center.x - b.center.x)
+  const cap = Math.max(roleIds.length, roleIds.length * trackingConfig.candidatesPerDancer)
   for (const detection of unclaimed) {
-    const id = freeIds.shift()
-    if (!id) break
+    if (next.length >= cap) break
+    const id = roleIds.find((roleId) => !next.some((track) => track.id === roleId)) ?? `candidate-${next.length + 1}`
     next.push({ id, frames: [toFrame(detection, timeSec)], appearance: detection.appearance })
   }
   return next
+}
+
+/**
+ * Manual fix at one moment: the stretch of `trackIndex` that contains `timeSec` (one unambiguous
+ * tracklet) becomes `roleId`. Whatever `roleId` held during that stretch moves to the other track,
+ * so both people stay correct outside the stretch. Without segment data, whole tracks swap.
+ */
+export function reassignSegment(tracks: ReferenceTrack[], roleId: string, trackIndex: number, timeSec: number): ReferenceTrack[] {
+  const source = tracks[trackIndex]
+  if (!source) return tracks
+  const nearest = source.frames.reduce<ReferenceTrackFrame | undefined>((best, frame) => (!best || Math.abs(frame.timeSec - timeSec) < Math.abs(best.timeSec - timeSec) ? frame : best), undefined)
+  if (source.id === roleId || nearest?.segment === undefined) return reassignRole(tracks, roleId, trackIndex)
+  const moving = source.frames.filter((frame) => frame.segment === nearest.segment)
+  const start = moving[0].timeSec
+  const end = moving.at(-1)!.timeSec
+  const targetIndex = tracks.findIndex((track) => track.id === roleId)
+  const displaced = targetIndex >= 0 ? tracks[targetIndex].frames.filter((frame) => frame.timeSec >= start && frame.timeSec <= end) : []
+  const byTime = (a: ReferenceTrackFrame, b: ReferenceTrackFrame) => a.timeSec - b.timeSec
+  return tracks.map((track, index) => {
+    if (index === trackIndex) return { ...track, frames: [...track.frames.filter((frame) => frame.segment !== nearest.segment), ...displaced].sort(byTime) }
+    if (index === targetIndex) return { ...track, frames: [...track.frames.filter((frame) => frame.timeSec < start || frame.timeSec > end), ...moving].sort(byTime) }
+    return track
+  })
 }
 
 /** Swap role labels so `roleId` follows the dancer currently held by `trackIndex`. */
@@ -340,4 +429,123 @@ export function focusCrop(frame: ReferenceTrackFrame, videoWidth: number, videoH
   const x = Math.min(Math.max(frame.center.x - width / 2, 0), 1 - width)
   const y = Math.min(Math.max(frame.center.y - height / 2, 0), 1 - height)
   return { x, y, width, height }
+}
+
+/** How much a track moves: 90th-percentile limb-plus-hip speed in torso lengths per second. */
+export function trackMotion(track: ReferenceTrack): number {
+  const speeds: number[] = []
+  for (let i = 1; i < track.frames.length; i += 1) {
+    const a = track.frames[i - 1]
+    const b = track.frames[i]
+    const dt = b.timeSec - a.timeSec
+    if (dt <= 0 || dt > 0.5) continue
+    let sum = 0
+    for (const joint of [15, 16, 27, 28, 23, 24]) sum += Math.hypot(b.landmarks[joint].x - a.landmarks[joint].x, b.landmarks[joint].y - a.landmarks[joint].y)
+    speeds.push(sum / 6 / Math.max(a.scale, 0.01) / dt)
+  }
+  if (speeds.length < 3) return 0
+  const sorted = speeds.sort((x, y) => x - y)
+  return sorted[Math.floor(sorted.length * 0.9)]
+}
+
+/** Join fragments of the same dancer that were split by a gap in detection. */
+export function stitchTracks(tracks: ReferenceTrack[]): ReferenceTrack[] {
+  const pieces = tracks.map((track) => ({ ...track, frames: [...track.frames] }))
+  for (;;) {
+    let best: { from: number; to: number; cost: number } | null = null
+    pieces.forEach((a, i) => pieces.forEach((b, j) => {
+      if (i === j || !a.frames.length || !b.frames.length) return
+      const end = a.frames.at(-1)!
+      const start = b.frames[0]
+      const gap = start.timeSec - end.timeSec
+      if (gap <= 0 || gap > trackingConfig.stitchGapSec) return
+      const distance = Math.hypot(start.center.x - end.center.x, start.center.y - end.center.y) / Math.max(end.scale, 0.02)
+      const looks = appearanceDistance(a.appearance, b.appearance) ?? 0.15
+      if (distance > 2 + gap * 3 || looks > trackingConfig.maxAppearanceDistance) return
+      const cost = distance / (1 + gap) + 5 * looks + gap
+      if (!best || cost < best.cost) best = { from: i, to: j, cost }
+    }))
+    if (!best) return pieces.filter((piece) => piece.frames.length)
+    const { from, to } = best as { from: number; to: number }
+    pieces[from].frames.push(...pieces[to].frames)
+    pieces[to].frames = []
+  }
+}
+
+/**
+ * Turn raw candidate tracks into the dancers: stitch fragments, drop things that never move
+ * (bags on the side, chairs), keep the `roleIds.length` best-covered tracks, and number them left
+ * to right as seen when (nearly) all of them are visible early in the clip.
+ */
+export function finalizeTracks(tracks: ReferenceTrack[], roleIds: string[]): ReferenceTrack[] {
+  const stitched = stitchTracks(tracks)
+  const moving = stitched.filter((track) => trackMotion(track) >= trackingConfig.minMotion)
+  const kept = (moving.length ? moving : stitched).sort((a, b) => b.frames.length - a.frames.length).slice(0, roleIds.length)
+  if (!kept.length) return []
+  const times = [...new Set(kept.flatMap((track) => track.frames.map((frame) => frame.timeSec)))].sort((a, b) => a - b)
+  const visibleAt = (time: number) => kept.filter((track) => track.frames.some((frame) => Math.abs(frame.timeSec - time) < 0.08)).length
+  const target = Math.max(1, kept.length - 1)
+  const reference = times.find((time) => visibleAt(time) >= target) ?? times[0]
+  const xAt = (track: ReferenceTrack) => track.frames.reduce((best, frame) => (Math.abs(frame.timeSec - reference) < Math.abs(best.timeSec - reference) ? frame : best)).center.x
+  return kept
+    .sort((a, b) => xAt(a) - xAt(b))
+    .map((track, index) => ({ ...track, frames: [...track.frames].sort((a, b) => a.timeSec - b.timeSec), id: roleIds[index] }))
+}
+
+/* ---------------------------------------------------------------- top-down detection -------- */
+
+/** A person box in normalized frame coordinates, with the detector's confidence. */
+export type PersonBox = { x: number; y: number; width: number; height: number; score: number }
+
+const boxIou = (a: PersonBox, b: PersonBox) => {
+  const x1 = Math.max(a.x, b.x)
+  const y1 = Math.max(a.y, b.y)
+  const x2 = Math.min(a.x + a.width, b.x + b.width)
+  const y2 = Math.min(a.y + a.height, b.y + b.height)
+  const intersection = Math.max(0, x2 - x1) * Math.max(0, y2 - y1)
+  return intersection / (a.width * a.height + b.width * b.height - intersection)
+}
+
+/** Keep the best-scoring box among overlapping duplicates from different detector passes. */
+export function mergeBoxes(boxes: PersonBox[], iou = 0.5): PersonBox[] {
+  const kept: PersonBox[] = []
+  for (const box of [...boxes].sort((a, b) => b.score - a.score)) if (!kept.some((other) => boxIou(other, box) > iou)) kept.push(box)
+  return kept
+}
+
+/**
+ * Person-detector passes: the full frame plus two overlapping halves, so people far from the
+ * camera are large enough to be found.
+ */
+export function personRegions(videoWidth: number, videoHeight: number): Crop[] {
+  if (videoWidth < videoHeight * 1.2) return [{ x: 0, y: 0, width: 1, height: 1 }]
+  return [{ x: 0, y: 0, width: 1, height: 1 }, { x: 0, y: 0.15, width: 0.55, height: 0.85 }, { x: 0.45, y: 0.15, width: 0.55, height: 0.85 }]
+}
+
+/** A square crop around one person box, padded so the whole body and some context are inside. */
+export function poseCropForBox(box: PersonBox, videoWidth: number, videoHeight: number): Crop {
+  const sidePx = Math.min(Math.max(box.width * videoWidth, box.height * videoHeight) * 1.25, videoWidth, videoHeight)
+  const width = sidePx / videoWidth
+  const height = sidePx / videoHeight
+  const cx = box.x + box.width / 2
+  const cy = box.y + box.height / 2
+  return { x: Math.min(Math.max(cx - width / 2, 0), 1 - width), y: Math.min(Math.max(cy - height / 2, 0), 1 - height), width, height }
+}
+
+/**
+ * Of the poses found in a box's crop (possibly including a neighbor), the one belonging to the box:
+ * its hips inside the box and most of its visible joints within it.
+ */
+export function poseForBox(poses: PoseLandmark[][], box: PersonBox): PoseLandmark[] | null {
+  let best: { pose: PoseLandmark[]; score: number } | null = null
+  const margin = { x: box.width * 0.15, y: box.height * 0.1 }
+  const inside = (p: PoseLandmark) => p.x >= box.x - margin.x && p.x <= box.x + box.width + margin.x && p.y >= box.y - margin.y && p.y <= box.y + box.height + margin.y
+  for (const pose of poses) {
+    const hip = { x: (pose[23].x + pose[24].x) / 2, y: (pose[23].y + pose[24].y) / 2, z: 0, visibility: 1 }
+    if (!inside(hip)) continue
+    const joints = pose.filter((p) => p.visibility >= 0.5)
+    const score = joints.filter(inside).length / Math.max(1, joints.length) - Math.abs(hip.x - (box.x + box.width / 2)) / box.width
+    if (!best || score > best.score) best = { pose, score }
+  }
+  return best?.pose ?? null
 }

@@ -17,6 +17,11 @@ nav span { margin-left: auto; color: #89838d; font-size: 12px; text-transform: u
 .card header h2, .card header h3 { margin-top: 3px; }
 small { color: #8e8793; letter-spacing: .1em; }
 .sidebar { align-self: start; position: sticky; top: 16px; display: grid; gap: 8px; }
+.dancer-count { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: #cfc9d3; font-size: 13px; }
+.dancer-count input { width: 64px; padding: 6px 8px; border: 0; border-radius: 8px; background: #29272e; color: #eee9f1; }
+.grid-fix { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 11px; color: #9d9587; }
+.sidebar .grid-fix button { padding: 4px 7px; font-size: 11px; }
+.grid-status { color: #9d9587; font-size: 11px; line-height: 1.4; }
 .sidebar small:not(:first-child) { margin-top: 18px; }
 .sidebar button, .tabs button, .results footer button { color: #bcb6c0; background: #242229; border: 1px solid transparent; border-radius: 10px; padding: 11px; text-align: left; }
 .sidebar button.selected, .tabs button.selected, .results footer button.selected { color: white; border-color: #ffffff40; background: #302d35; }

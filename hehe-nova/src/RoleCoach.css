@@ -48,3 +48,13 @@
 .compare-figure { width: 160px; height: 200px; background: #08080a; border-radius: 10px; grid-row: span 2; }
 
 @media (max-width: 900px) { .coach-learn, .coach-practice { grid-template-columns: 1fr; } }
+.radar-box { display: grid; grid-template-columns: 200px 1fr; gap: 10px; align-items: center; color: #8f8993; font-size: 12px; list-style: none; }
+.floor-radar { width: 200px; height: 200px; background: #08080a; border-radius: 10px; }
+.move-hint { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 3; padding: 7px 12px; border-radius: 9px; background: #f5f1e8; color: #111; font-weight: 800; font-size: 14px; white-space: nowrap; }
+.big-count.count-in { background: #ffc857ee; }
+.on-spot { color: #7df9d0; font-style: normal; }
+.off-spot { color: #ffc857; font-style: normal; }
+.move-hint.formation { background: #4dff88; }
+.mode-badge { position: absolute; right: 10px; bottom: 10px; z-index: 3; padding: 5px 9px; border-radius: 8px; background: #111c; color: #4dff88; font-size: 11px; font-weight: 800; }
+.formation-practice { display: grid; gap: 6px; color: #8f8993; font-size: 12px; }
+.formation-practice .formation-diagram { max-width: 360px; }
