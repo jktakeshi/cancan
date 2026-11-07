@@ -111,7 +111,6 @@ function UploadPanel({ onAdd, pickerRef }: { onAdd: HomeProps['onAdd']; pickerRe
     {tooLong && <p className="home-note is-warn">This clip is longer than {recommendedMaxDurationSec / 60} minutes. It will still work, but finding the dancers takes longer.</p>}
     {error && <p className="home-note is-error" role="alert">{error}</p>}
     <TextField label="Rehearsal name" placeholder={pending ? nameFromFile(pending.file.name) : 'e.g. Spring showcase, piece 2'} value={name} onChange={(event) => setName(event.target.value)} />
-    <p className="home-note">Tempo and counts are detected from the music after you open the rehearsal.</p>
     <Button block disabled={!pending} onClick={add} icon={<img src={iconUploadButton} width={20} height={20} alt="" />}>Upload</Button>
   </section>
 }
@@ -132,8 +131,8 @@ export function Home({ rehearsals, onAdd, onOpen }: HomeProps) {
       <img className="home-decoration" src={floorPathDecoration} width={1440} height={738} alt="" />
       <div className="home-pitch">
         <h1 className="text-hero">Missed rehearsal?<br />Learn <span className="text-accent">your</span> part, count by count.</h1>
-        <p className="text-body-large text-secondary">Upload a choreography, tap your dancer, and learn one eight-count at a time. Record a take and get the one fix that matters most.</p>
-        <div><Button onClick={startUpload} icon={<img src={iconUploadHero} width={20} height={20} alt="" />}>Upload a choreography</Button></div>
+        <p className="text-body-large text-secondary">Upload a rehearsal, tap your dancer, and learn one eight-count at a time. Then record a take and get feedback on movements and positioning!</p>
+        <div><Button onClick={startUpload} icon={<img src={iconUploadHero} width={20} height={20} alt="" />}>Upload a rehearsal</Button></div>
       </div>
       <div className="home-how">
         <h2 className="text-h2">How it works</h2>
