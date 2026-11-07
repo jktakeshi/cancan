@@ -1,6 +1,8 @@
 # Dance Catch-up
 
-This is the starter scaffold for Dance Catch-up. It is a Vite, React, and TypeScript app with the MediaPipe Pose Landmarker assets bundled locally. App structure, design, and the backend approach are still being decided.
+This is the functional foundation for Dance Catch-up, a role-aware rehearsal coach. It supports phrase and role selection, reference-video review, formation paths, webcam or prerecorded learner input, MediaPipe whole-body tracking, calibrated landing evaluation, posture comparison, prioritized feedback, retry, and the same-attempt/two-role judging reveal.
+
+The repository currently uses labeled placeholder choreography metadata. Real reference and learner videos can be selected from the interface while the final asset package and annotations are being prepared.
 
 ## Requirements
 
@@ -23,7 +25,7 @@ npm ci
 cp .env.example .env.local
 ```
 
-Then paste the team's OpenRouter key into `.env.local`:
+An OpenRouter key is optional and is not used by the current deterministic evaluator. If a server-side correction-rephrasing endpoint is added later, place the team's key in `.env.local`:
 
 ```
 OPENROUTER_API_KEY=sk-or-...
@@ -40,6 +42,7 @@ OPENROUTER_API_KEY=sk-or-...
 | `npm run preview` | Serve `dist/` on http://localhost:4173 |
 | `npm run typecheck` | `tsc -b` only |
 | `npm run lint` | oxlint |
+| `npm test` | Run deterministic geometry and evaluation tests |
 | `npm run copyWasm` | Refresh the MediaPipe WASM files in `public/mediapipe/wasm` |
 
 ## MediaPipe assets
@@ -56,7 +59,12 @@ These are served locally so the app does not depend on a CDN at demo time.
 | Path | Purpose |
 | --- | --- |
 | `src/main.tsx` | Entry point |
-| `src/App.tsx` | Placeholder root component |
+| `src/App.tsx` | Minimal end-to-end learning and practice interface |
+| `src/demoData.ts` | Replaceable placeholder rehearsal and attempt manifests |
+| `src/domain.ts` | Shared rehearsal, pose, calibration, and result types |
+| `src/geometry.ts` | Floor calibration, homography, and formation scaling |
+| `src/evaluation.ts` | Landing, formation, posture, and correction evaluation |
+| `src/usePoseInput.ts` | Shared MediaPipe input for webcam and learner videos |
 | `src/index.css` | Global reset and shared styles |
 | `public/models/` | Pose model file |
 | `public/mediapipe/wasm/` | MediaPipe WASM runtime |
