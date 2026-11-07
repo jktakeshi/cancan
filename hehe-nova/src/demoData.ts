@@ -7,13 +7,17 @@ const emptyPose = (): PoseLandmark[] => Array.from({ length: 33 }, (_, index) =>
   visibility: 1,
 }))
 
+const beatSec = 60 / 142.5
+const firstCountSec = 2.606
+
 const countMarks = (startSec: number) => Array.from({ length: 8 }, (_, index) => ({
   count: (index + 1) as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
-  timeSec: startSec + index * (2 / 3),
+  timeSec: startSec + index * beatSec,
 }))
 
 export const demoManifest: RehearsalManifest = {
   title: 'Demo rehearsal',
+  frontVideo: '/IMG_9745.MOV',
   placeholder: true,
   referenceCalibration: {
     corners: [
@@ -25,13 +29,13 @@ export const demoManifest: RehearsalManifest = {
     widthM: 4,
     depthM: 3,
   },
-  phrases: [0, 1].map((phraseIndex) => {
-    const startSec = phraseIndex * 6
+  phrases: [0, 1, 2, 3].map((phraseIndex) => {
+    const startSec = firstCountSec + phraseIndex * 8 * beatSec
     return {
       id: `phrase-${phraseIndex + 1}`,
       label: `Eight-count ${phraseIndex + 1}`,
       startSec,
-      endSec: startSec + 5.4,
+      endSec: startSec + 8 * beatSec,
       counts: countMarks(startSec),
       teachingChunks: [
         { startCount: 1, endCount: 4, instruction: 'Step out, transfer weight, and begin traveling.' },
@@ -44,7 +48,7 @@ export const demoManifest: RehearsalManifest = {
           color: '#ff5d8f',
           highlights: [
             { timeSec: startSec, center: { x: 0.42, y: 0.55 }, radius: 0.11 },
-            { timeSec: startSec + 5.4, center: { x: 0.27, y: 0.55 }, radius: 0.11 },
+            { timeSec: startSec + 8 * beatSec, center: { x: 0.27, y: 0.55 }, radius: 0.11 },
           ],
           startFloor: { x: 1.7, y: 1.5 },
           pathFloor: [{ x: 1.7, y: 1.5 }, { x: 1.2, y: 1.7 }, { x: 0.8, y: 1.8 }],
@@ -61,11 +65,28 @@ export const demoManifest: RehearsalManifest = {
           color: '#59d9ff',
           highlights: [
             { timeSec: startSec, center: { x: 0.58, y: 0.55 }, radius: 0.11 },
-            { timeSec: startSec + 5.4, center: { x: 0.73, y: 0.55 }, radius: 0.11 },
+            { timeSec: startSec + 8 * beatSec, center: { x: 0.73, y: 0.55 }, radius: 0.11 },
           ],
           startFloor: { x: 2.3, y: 1.5 },
           pathFloor: [{ x: 2.3, y: 1.5 }, { x: 2.8, y: 1.7 }, { x: 3.2, y: 1.8 }],
           finishFloor: { x: 3.2, y: 1.8 },
+          poseTargets: [{ count: 8, landmarks: emptyPose() }],
+          movementEvents: [
+            { count: 3, kind: 'travel-start' as const, toleranceMs: 350 },
+            { count: 8, kind: 'arrival' as const, toleranceMs: 350 },
+          ],
+        },
+        {
+          id: 'role-c',
+          label: 'Role C',
+          color: '#ffd166',
+          highlights: [
+            { timeSec: startSec, center: { x: 0.5, y: 0.48 }, radius: 0.075 },
+            { timeSec: startSec + 8 * beatSec, center: { x: 0.5, y: 0.55 }, radius: 0.11 },
+          ],
+          startFloor: { x: 2, y: 2.5 },
+          pathFloor: [{ x: 2, y: 2.5 }, { x: 2, y: 2.1 }, { x: 2, y: 1.8 }],
+          finishFloor: { x: 2, y: 1.8 },
           poseTargets: [{ count: 8, landmarks: emptyPose() }],
           movementEvents: [
             { count: 3, kind: 'travel-start' as const, toleranceMs: 350 },
