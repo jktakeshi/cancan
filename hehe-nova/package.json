@@ -9,7 +9,7 @@
     "lint": "oxlint",
     "typecheck": "tsc -b",
     "preview": "vite preview",
-    "copyWasm": "rm -rf public/mediapipe/wasm && cp -R node_modules/@mediapipe/tasks-vision/wasm public/mediapipe/wasm"
+    "copyWasm": "node -e \"const fs=require('node:fs');fs.rmSync('public/mediapipe/wasm',{recursive:true,force:true});fs.cpSync('node_modules/@mediapipe/tasks-vision/wasm','public/mediapipe/wasm',{recursive:true})\""
   },
   "engines": {
     "node": ">=22.12"

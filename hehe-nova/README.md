@@ -4,13 +4,21 @@ This is the starter scaffold for Dance Catch-up. It is a Vite, React, and TypeSc
 
 ## Requirements
 
-- Node **22.12 or newer** (the repo has an `.nvmrc`, so `nvm use` picks it up).
-- Run `npm ci` and every npm command from the same environment. Vite ships native binaries per OS, so a `node_modules` installed in WSL will not run from Windows PowerShell and the other way around.
+- Node **22.12 or newer**. Check with `node -v`. The repo has an `.nvmrc` for anyone using nvm.
+- Run `npm ci` and every npm command from the same environment. Vite ships native binaries per OS, so a `node_modules` installed in WSL will not run from Windows PowerShell and the other way around. If you switch, delete `node_modules` and run `npm ci` again.
 
 ## Setup
 
+Windows PowerShell:
+
+```powershell
+npm ci
+Copy-Item .env.example .env.local
+```
+
+macOS, Linux, or WSL:
+
 ```bash
-nvm use
 npm ci
 cp .env.example .env.local
 ```
