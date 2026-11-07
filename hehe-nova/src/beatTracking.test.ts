@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { analyzeBeats, buildCountGrid, phrasesFromGrid } from './beatTracking'
+import { analyzeBeats, anchoredCountGrid, buildCountGrid, phrasesFromGrid } from './beatTracking'
 
 /** Clicks with a noise burst on every beat, starting at `offset` seconds. */
 function clickTrack(bpm: number, seconds: number, sampleRate = 22050, offset = 0.1) {
@@ -51,5 +51,36 @@ describe('count grid', () => {
     expect(phrases[0].startSec).toBeCloseTo(grid.counts[0])
     expect(phrases[0].counts).toHaveLength(8)
     expect(phrases[0].counts[1].timeSec - phrases[0].counts[0].timeSec).toBeCloseTo(2 * 60 / 144, 2)
+  })
+})
+
+describe('complete eight-counts only', () => {
+  it('ignores counts left over at the end of the clip', () => {
+    // 21 counts after count 1: two full eight-counts plus five leftovers.
+    const counts = Array.from({ length: 21 }, (_, index) => 5.17 + index * 0.533)
+    const phrases = phrasesFromGrid({ countSec: 0.533, beatsPerCount: 1, counts, countIn: [3.1, 3.6, 4.1, 4.6], danceStartSec: 5 }, [], 16.47)
+    expect(phrases.map((phrase) => phrase.label)).toEqual(['Eight-count 1', 'Eight-count 2'])
+    expect(phrases[0].startSec).toBeCloseTo(5.17)
+    expect(phrases[1].startSec).toBeCloseTo(5.17 + 8 * 0.533)
+  })
+})
+
+describe('counts pinned by a person', () => {
+  it('follows the music pulse at the pinned tempo, with the 5-6-7-8 before count 1', () => {
+    // Clicks every 0.711 s from 0.17 s, as in the bundled clip (84.4 counts a minute).
+    const samples = clickTrack(84.4, 16, 22050, 0.17)
+    const { envelope, frameRate } = analyzeBeats(samples, 22050)
+    const grid = anchoredCountGrid(envelope, frameRate, 3.7, 8.8, 16)
+    expect(grid.anchored).toBe(true)
+    expect(grid.counts[0]).toBeCloseTo(0.17 + 5 * 0.711, 1)
+    expect(grid.counts[7]).toBeCloseTo(0.17 + 12 * 0.711, 1)
+    expect(grid.countIn).toHaveLength(4)
+    expect(phrasesFromGrid(grid, [], 16)).toHaveLength(2)
+  })
+
+  it('falls back to an even grid through the anchors when there is no clear pulse', () => {
+    const grid = anchoredCountGrid(new Float32Array(1000), 86, 3.7, 8.8, 16)
+    expect(grid.counts[0]).toBeCloseTo(3.7, 2)
+    expect(grid.counts[7]).toBeCloseTo(8.8, 2)
   })
 })

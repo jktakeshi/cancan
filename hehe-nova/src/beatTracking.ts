@@ -179,6 +179,8 @@ export type CountGrid = {
   countIn: number[]
   /** When the dancers start moving, used to place count 1. */
   danceStartSec: number | null
+  /** True when count 1 and count 8 were pinned by a person rather than detected. */
+  anchored?: boolean
 }
 
 /** Strength of periodicity in a movement-energy signal at a given period (seconds). */
@@ -221,6 +223,46 @@ export type GridOverrides = {
   beatsPerCount?: number
   /** Move count 1 later (positive) or earlier (negative) by whole counts. */
   shiftCounts?: number
+  /**
+   * Count 1 and count 8 of the first phrase, pinned by a person (seconds). Together they fix the
+   * count tempo and phase, which audio alone cannot always settle: music with a three-against-four
+   * feel has strong pulses at more than one tempo.
+   */
+  countOneSec?: number
+  countEightSec?: number
+}
+
+/**
+ * The count grid from a person's count-1 and count-8 times. Beats are tracked in the music at the
+ * implied tempo, so counts still land on the actual pulse; if tracking disagrees with the anchors,
+ * an even grid through the anchors is used instead.
+ */
+export function anchoredCountGrid(envelope: Float32Array, frameRate: number, countOneSec: number, countEightSec: number, duration: number, shiftCounts = 0): CountGrid {
+  const countSec = Math.max(0.2, (countEightSec - countOneSec) / 7)
+  const nearestIndex = (times: number[], target: number) => times.reduce((best, time, index) => (Math.abs(time - target) < Math.abs(times[best] - target) ? index : best), 0)
+  let times = trackBeats(envelope, frameRate, 60 / countSec)
+  let first = nearestIndex(times, countOneSec)
+  // Tracked beats are only trusted when they sit on real onsets (stronger than the track's average).
+  const strengthAt = (time: number) => envelope[Math.min(envelope.length - 1, Math.max(0, Math.round(time * frameRate)))] ?? 0
+  const average = envelope.reduce((sum, value) => sum + value, 0) / Math.max(1, envelope.length)
+  const onBeats = times.reduce((sum, time) => sum + strengthAt(time), 0) / Math.max(1, times.length)
+  const agrees = onBeats > average * 1.2 && times.length > first + 7 && Math.abs(times[first] - countOneSec) < countSec * 0.4 && Math.abs(times[first + 7] - countEightSec) < countSec * 0.4
+  if (!agrees) {
+    // Even grid through the anchors, extended across the whole clip.
+    const start = countOneSec - Math.floor(countOneSec / countSec) * countSec
+    times = []
+    for (let time = start; time < duration; time += countSec) times.push(time)
+    first = nearestIndex(times, countOneSec)
+  }
+  first = Math.max(0, Math.min(times.length - 1, first + shiftCounts))
+  return {
+    countSec,
+    beatsPerCount: 1,
+    counts: times.slice(first).filter((time) => time < duration),
+    countIn: times.slice(Math.max(0, first - 4), first),
+    danceStartSec: null,
+    anchored: true,
+  }
 }
 
 /** Dancers typically count around this many counts per minute, counting fast music in half time. */
@@ -333,23 +375,22 @@ export function buildCountGrid(beats: number[], motion: number[], motionStepSec:
 
 
 /**
- * Eight-count phrases from the count grid, starting at count 1 (the count-in is excluded). A
- * trailing phrase is kept when at least six of its counts fall inside the clip; its remaining
- * counts continue the grid past the end.
+ * Eight-count phrases from the count grid, starting at count 1 (the count-in is excluded). Only
+ * complete eight-counts are phrases: a few counts left over at the end of the clip are not.
  */
 export function phrasesFromGrid(grid: CountGrid, roles: RoleTarget[], duration: number): Phrase[] {
   const phrases: Phrase[] = []
   for (let start = 0; start < grid.counts.length; start += 8) {
     const inside = grid.counts.slice(start, start + 8)
-    if (inside.length < 6) break
+    if (inside.length < 8) break
     const times = [...inside]
-    while (times.length < 8) times.push(times.at(-1)! + grid.countSec)
     const counts = times.map((timeSec, index) => ({ count: (index + 1) as CountMark['count'], timeSec }))
-    const endSec = times[7] + grid.countSec
+    // A phrase ends where the next count 1 lands (or one count after count 8 at the end of the clip).
+    const endSec = grid.counts[start + 8] ?? times[7] + grid.countSec
     const number = phrases.length + 1
     phrases.push({
       id: `phrase-${number}`,
-      label: `Eight-count ${number}${inside.length < 8 || endSec > duration + 0.05 ? ' (clip ends early)' : ''}`,
+      label: `Eight-count ${number}`,
       startSec: times[0],
       endSec: Math.min(endSec, duration),
       counts,

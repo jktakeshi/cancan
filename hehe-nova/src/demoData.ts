@@ -17,7 +17,10 @@ const countMarks = (startSec: number) => Array.from({ length: 8 }, (_, index) =>
 
 export const demoManifest: RehearsalManifest = {
   title: 'Demo rehearsal',
-  frontVideo: '/rehearsal1.mov',
+  frontVideo: '/rehearsal2.MOV',
+  dancerCount: 3,
+  // Verified by ear: "5, 6, 7, 8" is called before count 1 (just before 0:04); count 8 lands near 0:09.
+  countAnchors: { countOneSec: 3.7, countEightSec: 8.8 },
   placeholder: true,
   referenceCalibration: {
     corners: [

@@ -1,0 +1,15 @@
+.take-replay { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-surface); }
+.take-replay.is-empty { padding: 12px 14px; }
+.take-replay-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.take-replay-head h3 { margin-right: auto; }
+.take-replay-rate { display: flex; gap: 4px; }
+.take-replay-rate button, .take-replay-download { padding: 5px 10px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: transparent; color: var(--text-secondary); font: 600 12px/1 var(--font-body); text-decoration: none; cursor: pointer; }
+.take-replay-rate button.is-on { border-color: var(--accent-role); color: var(--accent-role); }
+.take-replay-video { width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius-sm); background: #000; }
+.take-replay-fix { color: var(--text-secondary); }
+.take-replay-list { list-style: none; display: grid; gap: 4px; margin: 0; padding: 0; }
+.take-replay-list li { display: flex; gap: 4px; }
+.take-replay-list li > button:first-child { flex: 1; display: grid; grid-template-columns: auto auto 1fr auto; gap: 10px; align-items: baseline; padding: 7px 10px; border: 1px solid transparent; border-radius: var(--radius-sm); background: var(--bg-canvas); color: var(--text-secondary); text-align: left; cursor: pointer; }
+.take-replay-list li.is-selected > button:first-child { border-color: var(--accent-role); color: var(--text-white); }
+.take-replay-list-fix { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.take-replay-delete { width: 30px; border: 0; border-radius: var(--radius-sm); background: var(--bg-canvas); color: var(--text-muted); cursor: pointer; }

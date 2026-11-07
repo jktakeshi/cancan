@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PoseLandmark } from './domain'
-import { cameraFor, floorConfig, floorPosition, learnerView, moveInstruction, placeOnFloor, projectFloor, toLearnerFloor } from './floor'
+import { cameraFor, fitScaleToView, floorConfig, floorPosition, learnerView, moveInstruction, placeOnFloor, projectFloor, toLearnerFloor } from './floor'
 
 const camera = cameraFor(1280, 720, 65)
 const CAMERA_HEIGHT = 1.0
@@ -49,8 +49,30 @@ describe('single-camera floor positions', () => {
   })
 
   it('gives learner-relative directions (camera-right is your left)', () => {
-    expect(moveInstruction({ x: 0, z: 3 }, { x: 0.8, z: 3 })).toBe('Move 0.8 m to your left')
-    expect(moveInstruction({ x: 0, z: 3 }, { x: -0.6, z: 2.4 })).toBe('Move 0.6 m to your right and 0.6 m forward')
+    expect(moveInstruction({ x: 0, z: 3 }, { x: 1.3, z: 3 })).toBe('Take 2 steps to your left')
+    expect(moveInstruction({ x: 0, z: 3 }, { x: -0.6, z: 2.6 })).toBe('Take 1 step to your right and a small step forward')
     expect(moveInstruction({ x: 0, z: 3 }, { x: 0.1, z: 3.1 })).toBeNull()
+  })
+})
+
+describe('size-independent formation fit', () => {
+  it('shrinks a wide formation until every dancer is inside the webcam view', () => {
+    const view = learnerView(personAt(0, 2.5), camera)!
+    const origin = { x: 0, z: 5 }
+    // Dancers 3 m either side of the learner's role: too wide for a webcam 2.5 m away.
+    const wide = [origin, { x: -3, z: 5 }, { x: 3, z: 5 }, { x: 0, z: 7 }]
+    const scale = fitScaleToView(wide, origin, { x: 0, z: 2.5 }, view)
+    expect(scale).toBeLessThan(1)
+    expect(scale).toBeGreaterThan(0.2)
+    for (const point of wide) {
+      const projected = projectFloor(toLearnerFloor(point, { anchor: { x: 0, z: 2.5 }, origin, scale }), view)!
+      expect(projected.x).toBeGreaterThanOrEqual(floorConfig.fitMargin - 1e-6)
+      expect(projected.x).toBeLessThanOrEqual(1 - floorConfig.fitMargin + 1e-6)
+    }
+  })
+
+  it('keeps a formation that already fits at full size', () => {
+    const view = learnerView(personAt(0, 3), camera)!
+    expect(fitScaleToView([{ x: 0, z: 5 }, { x: 0.5, z: 5 }], { x: 0, z: 5 }, { x: 0, z: 3 }, view)).toBe(1)
   })
 })

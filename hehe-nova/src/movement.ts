@@ -1,4 +1,5 @@
 import type { Phrase, PoseLandmark, PoseSample } from './domain'
+import { stepsText } from './floor'
 import { poseAt, type ReferenceTrack } from './referenceTracking'
 
 /*
@@ -220,7 +221,8 @@ export function travelCues(start: PoseLandmark[] | null, end: PoseLandmark[] | n
   const cues: string[] = []
   const sideways = (b.hip.x - a.hip.x) / a.torso
   // Camera-right is the learner's left when the learner faces the camera.
-  if (Math.abs(sideways) >= movementConfig.travelThreshold) cues.push(`Travel to your ${sideways > 0 ? 'left' : 'right'}${Math.abs(sideways) > 1.5 ? ' (big move)' : ''}`)
+  // Torso lengths → meters (torso ≈ 0.5 m) → steps, so the cue matches the learner's own stride.
+  if (Math.abs(sideways) >= movementConfig.travelThreshold) cues.push(`Travel ${stepsText(Math.abs(sideways) * 0.5)} to your ${sideways > 0 ? 'left' : 'right'}`)
   const depth = b.torso / a.torso - 1
   if (Math.abs(depth) >= movementConfig.depthThreshold) cues.push(depth > 0 ? 'Move forward, toward the front' : 'Move back, away from the front')
   return cues

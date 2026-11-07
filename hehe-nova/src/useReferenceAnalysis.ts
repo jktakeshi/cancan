@@ -2,6 +2,7 @@ import { FilesetResolver, ObjectDetector, PoseLandmarker, type NormalizedLandmar
 import { useCallback, useRef, useState } from 'react'
 import type { PoseLandmark } from './domain'
 import { cameraFor, floorConfig } from './floor'
+import { FRAME_MOTION_STEP_SEC } from './useCountGrid'
 import { identifyDancers, type DetectionFrame } from './offlineTracking'
 import { appendTrackedFrame, dedupeDetections, detectionFromLandmarks, finalizeTracks, mergeBoxes, personRegions, poseCropForBox, poseForBox, reassignSegment, sampleAppearance, type Crop, type PersonBox, type ReferenceDetection, type ReferenceTrack, type Rgb } from './referenceTracking'
 
@@ -67,6 +68,30 @@ async function createModels(): Promise<Models> {
   }
 }
 
+/**
+ * Mean pixel change between frames sampled every FRAME_MOTION_STEP_SEC on a tiny image. Takes about
+ * a second, and tells when the dancing starts before dancer tracking finishes.
+ */
+async function measureFrameMotion(video: HTMLVideoElement): Promise<number[]> {
+  const canvas = document.createElement('canvas')
+  canvas.width = 96
+  canvas.height = Math.max(1, Math.round(96 * video.videoHeight / Math.max(1, video.videoWidth)))
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) return []
+  const motion: number[] = []
+  let previous: Uint8ClampedArray | null = null
+  for (let time = 0; time <= video.duration; time += FRAME_MOTION_STEP_SEC) {
+    await seek(video, Math.min(time, Math.max(0, video.duration - 0.01)))
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+    let change = 0
+    if (previous) for (let i = 0; i < pixels.length; i += 4) change += Math.abs(pixels[i] - previous[i]) + Math.abs(pixels[i + 1] - previous[i + 1]) + Math.abs(pixels[i + 2] - previous[i + 2])
+    motion.push(previous ? change / (pixels.length / 4) : 0)
+    previous = pixels
+  }
+  return motion
+}
+
 /* Finished analyses are cached per video and dancer count, so a clip is only analyzed once. */
 const CACHE_DB = 'hehe-reference-analysis'
 const CACHE_STORE = 'tracks'
@@ -110,6 +135,8 @@ export function useReferenceAnalysis() {
   const [error, setError] = useState('')
   const [delegate, setDelegate] = useState<'GPU' | 'CPU' | null>(null)
   const [remainingSec, setRemainingSec] = useState<number | null>(null)
+  /** Whole-frame motion every FRAME_MOTION_STEP_SEC, measured first so counts can start early. */
+  const [frameMotion, setFrameMotion] = useState<number[] | null>(null)
   const runRef = useRef(0)
 
   const analyze = useCallback(async (source: HTMLVideoElement, roleIds: string[], options: { force?: boolean } = {}) => {
@@ -121,6 +148,8 @@ export function useReferenceAnalysis() {
     setError('')
     try {
       if (!Number.isFinite(source.duration) || source.duration <= 0) throw new Error('The reference video metadata is not ready.')
+      setFrameMotion(await measureFrameMotion(source))
+      if (run !== runRef.current) return
       const cacheKey = `${source.currentSrc}|${roleIds.length}|v${referenceAnalysisConfig.cacheVersion}`
       const cached = options.force ? null : await cacheGet(cacheKey)
       if (run !== runRef.current) return
@@ -232,5 +261,5 @@ export function useReferenceAnalysis() {
     setTracks((current) => reassignSegment(current, roleId, trackIndex, timeSec))
   }, [])
 
-  return { analyze, assignRole, tracks, progress, status, error, delegate, remainingSec }
+  return { analyze, assignRole, tracks, progress, status, error, delegate, remainingSec, frameMotion }
 }

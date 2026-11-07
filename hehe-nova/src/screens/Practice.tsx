@@ -12,6 +12,7 @@ import { scoreTone } from '../ui/score'
 import { AppHeader } from './AppHeader'
 import { StepIndicator, type FlowStep } from './StepIndicator'
 import { TakeCompare } from './TakeCompare'
+import { TakeReplay } from './TakeReplay'
 import './Practice.css'
 
 type PracticeProps = {
@@ -111,6 +112,8 @@ export function Practice({ session, take, onRetry, onWatchAgain, onNextPhrase, o
             <Chip>{role.label}</Chip>
             <Chip tone="neutral">{take.speed}× speed</Chip>
           </div>
+
+          <TakeReplay rehearsalId={session.rehearsal.id} phraseNumber={phraseIndex + 1} take={take} fix={fix} />
 
           <div className="practice-stage">
             <TakeCompare

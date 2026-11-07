@@ -7,7 +7,8 @@ import { makeRoles } from './roles'
 import { useCountGrid } from './useCountGrid'
 import { useReferenceAnalysis } from './useReferenceAnalysis'
 
-export const defaultDancerCount = 12
+/** The manifest says how many dancers the bundled video has; uploads start from this and can change it. */
+export const defaultDancerCount = demoManifest.dancerCount ?? 12
 
 export type ReferenceMeta = { duration: number; aspect: number; width: number; height: number }
 
@@ -22,7 +23,8 @@ export function useRehearsalSession(rehearsal: Rehearsal) {
   const [dancerCount, setDancerCount] = useState(defaultDancerCount)
   const roles = useMemo(() => makeRoles(dancerCount), [dancerCount])
   const [meta, setMeta] = useState<ReferenceMeta>({ duration: 0, aspect: 16 / 9, width: 1280, height: 720 })
-  const [gridOverrides, setGridOverrides] = useState<GridOverrides>({})
+  // The bundled clip's count 1 and count 8 were checked by ear; uploads start from detection.
+  const [gridOverrides, setGridOverrides] = useState<GridOverrides>(() => (rehearsal.source === 'bundled' && demoManifest.countAnchors ? { ...demoManifest.countAnchors } : {}))
   const [loadError, setLoadError] = useState('')
   const analysisVideoRef = useRef<HTMLVideoElement | null>(null)
   const { analyze } = referenceAnalysis
@@ -71,7 +73,7 @@ export function useRehearsalSession(rehearsal: Rehearsal) {
     return ground ? { ...camera, ground } : camera
   }, [meta.width, meta.height, referenceAnalysis.status, referenceAnalysis.tracks])
 
-  const countGrid = useCountGrid(rehearsal.url, referenceAnalysis.tracks, referenceAnalysis.status === 'done', meta.duration, meta.aspect, roles, gridOverrides)
+  const countGrid = useCountGrid(rehearsal.url, referenceAnalysis.tracks, referenceAnalysis.status === 'done', meta.duration, meta.aspect, roles, gridOverrides, referenceAnalysis.frameMotion)
   // Until the count grid is detected, the manifest's labeled placeholder phrases stand in.
   const phrases = useMemo(() => (countGrid.phrases?.length ? countGrid.phrases : demoManifest.phrases.map((item) => ({ ...item, roles }))), [countGrid.phrases, roles])
 

@@ -21,6 +21,8 @@ export type Take = {
   learnerCamera: Camera
   /** Maps the reference stage into the learner's room, anchored on the learner's start spot. Null when no start spot could be measured. */
   mapping: FloorMapping | null
+  /** What the learner saw during the take (webcam, overlays, reference corner, music), for replay. */
+  recording?: { blob: Blob; url: string; mimeType: string }
 }
 
 /** Formation summary: on how many judged counts the learner stood on the target spot. */

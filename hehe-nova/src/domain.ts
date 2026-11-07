@@ -76,6 +76,10 @@ export type RehearsalManifest = {
   referenceCalibration: Calibration
   phrases: Phrase[]
   placeholder: boolean
+  /** How many dancers appear in the front video. */
+  dancerCount?: number
+  /** Manually verified times (seconds) of count 1 and count 8 of the first phrase. */
+  countAnchors?: { countOneSec: number; countEightSec: number }
 }
 
 export type ExpectedDimension = 'pass' | 'fail' | 'inconclusive'

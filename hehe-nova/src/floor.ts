@@ -26,6 +26,14 @@ export const floorConfig = {
   smoothingSec: 0.2,
   /** Distance from the target that counts as being in the right spot. */
   onSpotMeters: 0.35,
+  /**
+   * One ordinary step. Distances shown to the learner are in steps: the room's real size is never
+   * needed, and step length scales with the same body proportions that set depth.
+   */
+  stepMeters: 0.65,
+  /** Keep auto-fitted dancers inside this fraction of the webcam width, and at least this far away. */
+  fitMargin: 0.05,
+  fitMinDepthM: 1,
 }
 
 export type FloorPoint = { x: number; z: number }
@@ -185,16 +193,48 @@ export function placeOnFloor(pose: PoseLandmark[], referenceCamera: Camera, spot
   })
 }
 
-/** Learner-relative instruction for closing the gap from `actual` to `target`. */
+/** A distance as steps: "a small step", "1 step", "2 steps". */
+export function stepsText(meters: number) {
+  const steps = meters / floorConfig.stepMeters
+  if (steps < 0.75) return 'a small step'
+  const whole = Math.round(steps)
+  return `${whole} step${whole === 1 ? '' : 's'}`
+}
+
+/** Learner-relative instruction for closing the gap from `actual` to `target`, in steps. */
 export function moveInstruction(actual: FloorPoint, target: FloorPoint): string | null {
   const dx = target.x - actual.x
   const dz = target.z - actual.z
   if (Math.hypot(dx, dz) < floorConfig.onSpotMeters) return null
   const parts: string[] = []
   // Camera-right (+x) is the learner's left while facing the camera.
-  if (Math.abs(dx) >= 0.2) parts.push(`${Math.abs(dx).toFixed(1)} m to your ${dx > 0 ? 'left' : 'right'}`)
-  if (Math.abs(dz) >= 0.2) parts.push(`${Math.abs(dz).toFixed(1)} m ${dz < 0 ? 'forward' : 'back'}`)
-  return parts.length ? `Move ${parts.join(' and ')}` : null
+  if (Math.abs(dx) >= 0.2) parts.push(`${stepsText(Math.abs(dx))} to your ${dx > 0 ? 'left' : 'right'}`)
+  if (Math.abs(dz) >= 0.2) parts.push(`${stepsText(Math.abs(dz))} ${dz < 0 ? 'forward' : 'back'}`)
+  return parts.length ? `Take ${parts.join(' and ')}` : null
+}
+
+/**
+ * Size-independent placement: the largest scale (at most 1) at which every given reference floor
+ * point, mapped around the learner's start spot, lands inside the webcam view and in front of the
+ * camera. The learner never measures their room; the formation is shrunk to what the camera sees.
+ */
+export function fitScaleToView(points: FloorPoint[], origin: FloorPoint, anchor: FloorPoint, view: LearnerView): number {
+  const fits = (scale: number) => points.every((point) => {
+    const mapped = toLearnerFloor(point, { anchor, origin, scale })
+    if (mapped.z < floorConfig.fitMinDepthM) return false
+    const projected = projectFloor(mapped, view)
+    return projected !== null && projected.x >= floorConfig.fitMargin && projected.x <= 1 - floorConfig.fitMargin
+  })
+  if (fits(1)) return 1
+  let low = 0.05
+  let high = 1
+  if (!fits(low)) return low
+  for (let i = 0; i < 20; i += 1) {
+    const middle = (low + high) / 2
+    if (fits(middle)) low = middle
+    else high = middle
+  }
+  return low
 }
 
 /** `actual` and `target` are learner floor meters, kept so the result can be drawn on a map. */

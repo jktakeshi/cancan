@@ -53,3 +53,6 @@
 .pick-phrase-shortcuts { display: flex; gap: 10px; flex-wrap: wrap; }
 .pick-phrase-ruler .segment.status-solid { background: var(--status-solid); }
 .pick-phrase-ruler .segment.status-progress { background: var(--status-progress); }
+
+.pick-phrase-pin { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 8px 0; color: var(--text-secondary); font: 400 13px/1.4 var(--font-body); }
+.pick-phrase-pin input { width: 72px; margin: 0 4px; padding: 6px 8px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-canvas); color: var(--text-white); }

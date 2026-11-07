@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import iconArrow from '../assets/iconArrow.svg'
 import { phraseOverviews } from '../phraseSketches'
 import { phraseStatus, type PhraseProgress } from '../takes'
@@ -47,11 +47,22 @@ export function PickPhrase({ session, roleId, phraseId, progress, onPhraseChange
     return <Chip tone="neutral" dotColor={phraseStatus(entry) === 'solid' ? 'var(--status-solid)' : 'var(--status-progress)'}>{label} · {entry.score}</Chip>
   }
 
-  const shiftGrid = (change: { beatsPerCount?: number; shiftCounts?: number }) => session.setGridOverrides((value) => ({
-    ...value,
-    ...(change.beatsPerCount !== undefined ? { beatsPerCount: change.beatsPerCount } : {}),
-    ...(change.shiftCounts !== undefined ? { shiftCounts: (value.shiftCounts ?? 0) + change.shiftCounts } : {}),
-  }))
+  const shiftGrid = (change: { beatsPerCount?: number; shiftCounts?: number }) => session.setGridOverrides((value) => {
+    // Changing the count speed means the pinned count 1 / count 8 no longer apply.
+    const base = change.beatsPerCount !== undefined ? { ...value, countOneSec: undefined, countEightSec: undefined, shiftCounts: 0 } : value
+    return {
+      ...base,
+      ...(change.beatsPerCount !== undefined ? { beatsPerCount: change.beatsPerCount } : {}),
+      ...(change.shiftCounts !== undefined ? { shiftCounts: (base.shiftCounts ?? 0) + change.shiftCounts } : {}),
+    }
+  })
+  // Pin count 1 and count 8 of the first phrase by time; the grid then follows the music at that tempo.
+  const [countOneInput, setCountOneInput] = useState(() => (grid?.counts[0] ?? 0).toFixed(1))
+  const [countEightInput, setCountEightInput] = useState(() => (grid?.counts[7] ?? 0).toFixed(1))
+  const pinnedOne = Number(countOneInput)
+  const pinnedEight = Number(countEightInput)
+  const canPin = Number.isFinite(pinnedOne) && Number.isFinite(pinnedEight) && pinnedEight - pinnedOne >= 1.4
+  const pinCounts = () => { if (canPin) session.setGridOverrides({ countOneSec: pinnedOne, countEightSec: pinnedEight }) }
 
   return <div className="pick-phrase">
     <AppHeader
@@ -100,7 +111,15 @@ export function PickPhrase({ session, roleId, phraseId, progress, onPhraseChange
         </div>
         <details className="pick-phrase-adjust">
           <summary>Counts look wrong?</summary>
-          {grid && countGrid.bpm && <p className="text-micro text-muted">{Math.round(countGrid.bpm)} BPM music, {grid.beatsPerCount === 2 ? 'counted in half time' : grid.beatsPerCount === 1 ? 'one count per beat' : 'double time'} ({grid.countSec.toFixed(2)} s per count).{grid.countIn.length ? ` Count-in until ${grid.counts[0].toFixed(1)} s.` : ''}</p>}
+          {grid && (grid.anchored
+            ? <p className="text-micro text-muted">Counts pinned: count 1 at {grid.counts[0].toFixed(2)} s, {grid.countSec.toFixed(2)} s per count ({Math.round(60 / grid.countSec)} counts a minute). The “5, 6, 7, 8” count-in comes before count 1.</p>
+            : countGrid.bpm && <p className="text-micro text-muted">{Math.round(countGrid.bpm)} BPM music, {grid.beatsPerCount === 2 ? 'counted in half time' : grid.beatsPerCount === 1 ? 'one count per beat' : 'double time'} ({grid.countSec.toFixed(2)} s per count).{grid.countIn.length ? ` Count-in until ${grid.counts[0].toFixed(1)} s.` : ''}</p>)}
+          <div className="pick-phrase-pin">
+            <label>Count 1 at <input type="number" step={0.05} min={0} value={countOneInput} onChange={(event) => setCountOneInput(event.target.value)} /> s</label>
+            <label>Count 8 at <input type="number" step={0.05} min={0} value={countEightInput} onChange={(event) => setCountEightInput(event.target.value)} /> s</label>
+            <Button variant="secondary" size="medium" disabled={!canPin} onClick={pinCounts}>Pin counts</Button>
+            {grid?.anchored && <Button variant="secondary" size="medium" onClick={() => session.setGridOverrides({})}>Detect automatically</Button>}
+          </div>
           <div className="actions">
             <Button variant="secondary" size="medium" disabled={!grid} onClick={() => grid && shiftGrid({ beatsPerCount: Math.min(2, grid.beatsPerCount * 2) })}>Counts too fast</Button>
             <Button variant="secondary" size="medium" disabled={!grid} onClick={() => grid && shiftGrid({ beatsPerCount: Math.max(0.5, grid.beatsPerCount / 2) })}>Counts too slow</Button>

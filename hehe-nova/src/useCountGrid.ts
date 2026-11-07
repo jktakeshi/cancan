@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { decodeMonoAudio } from './audioDecode'
-import { analyzeBeats, buildCountGrid, phrasesFromGrid, type BeatAnalysis, type GridOverrides } from './beatTracking'
+import { analyzeBeats, anchoredCountGrid, buildCountGrid, phrasesFromGrid, type BeatAnalysis, type GridOverrides } from './beatTracking'
 import type { Phrase, RoleTarget } from './domain'
 import { motionEnergy, poseDeviation } from './movement'
 import type { ReferenceTrack } from './referenceTracking'
 
 const ANALYSIS_SAMPLE_RATE = 22050
 const MOTION_STEP_SEC = 0.1
+/** Whole-frame motion samples from `useReferenceAnalysis` arrive at this spacing. */
+export const FRAME_MOTION_STEP_SEC = 0.2
 
 async function decodeMono(url: string): Promise<Float32Array> {
   const response = await fetch(url)
@@ -18,7 +20,7 @@ async function decodeMono(url: string): Promise<Float32Array> {
  * Detects the music beat from the reference audio, then chooses the dance-count grid (count
  * rate and count 1) from the dancers' movement once reference tracking has finished.
  */
-export function useCountGrid(url: string, tracks: ReferenceTrack[], tracksReady: boolean, duration: number, aspect: number, roles: RoleTarget[], overrides: GridOverrides) {
+export function useCountGrid(url: string, tracks: ReferenceTrack[], tracksReady: boolean, duration: number, aspect: number, roles: RoleTarget[], overrides: GridOverrides, frameMotion: number[] | null) {
   const [beats, setBeats] = useState<{ url: string; analysis: BeatAnalysis } | { url: string; error: string } | null>(null)
 
   useEffect(() => {
@@ -37,9 +39,16 @@ export function useCountGrid(url: string, tracks: ReferenceTrack[], tracksReady:
   // starts once dancers are detected.
   const grid = useMemo(() => {
     if (!analysis || !(duration > 0)) return null
-    if (!tracksReady) return buildCountGrid(analysis.beats, [], MOTION_STEP_SEC, duration, overrides, [], analysis.accents)
+    // Counts pinned by a person win over detection.
+    if (overrides.countOneSec !== undefined && overrides.countEightSec !== undefined && overrides.countEightSec > overrides.countOneSec) {
+      return anchoredCountGrid(analysis.envelope, analysis.frameRate, overrides.countOneSec, overrides.countEightSec, duration, overrides.shiftCounts)
+    }
+    if (!tracksReady) {
+      // Before dancers are tracked, whole-frame motion says when the dancing starts.
+      return buildCountGrid(analysis.beats, frameMotion ?? [], FRAME_MOTION_STEP_SEC, duration, overrides, [], analysis.accents)
+    }
     return buildCountGrid(analysis.beats, motionEnergy(tracks, duration, aspect, MOTION_STEP_SEC), MOTION_STEP_SEC, duration, overrides, poseDeviation(tracks, duration, aspect, MOTION_STEP_SEC), analysis.accents)
-  }, [analysis, tracks, tracksReady, duration, aspect, overrides])
+  }, [analysis, tracks, tracksReady, duration, aspect, overrides, frameMotion])
 
   const phrases: Phrase[] | null = useMemo(() => (grid ? phrasesFromGrid(grid, roles, duration) : null), [grid, roles, duration])
 

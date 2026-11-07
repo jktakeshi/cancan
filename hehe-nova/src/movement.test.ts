@@ -73,7 +73,7 @@ describe('teaching cues', () => {
   })
 
   it('turns camera-right travel into "your left"', () => {
-    expect(travelCues(figure({ hipX: 0.3 }), figure({ hipX: 0.5 }), 1)).toEqual(['Travel to your left'])
+    expect(travelCues(figure({ hipX: 0.3 }), figure({ hipX: 0.5 }), 1)).toEqual(['Travel 1 step to your left'])
     expect(travelCues(figure({ scale: 0.2 }), figure({ scale: 0.24 }), 1)).toEqual(['Move forward, toward the front'])
   })
 
@@ -82,7 +82,7 @@ describe('teaching cues', () => {
     expect(lessons[0].cues[0]).toBe('Start facing front, both arms down, feet together')
     expect(lessons[2].cues).toContain('Right arm up overhead')
     expect(lessons[3].cues).not.toContain('Right arm up overhead')
-    expect(lessons[4].cues.some((cue) => cue.startsWith('Travel to your left'))).toBe(true)
+    expect(lessons[4].cues.some((cue) => /^Travel .* to your left$/.test(cue))).toBe(true)
   })
 })
 
