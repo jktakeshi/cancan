@@ -65,11 +65,16 @@ export function usePoseInput() {
     setLatest(null)
   }, [])
 
+  /** Drop buffered samples but keep the live preview; `keep` retains the newest few. */
+  const trimSamples = useCallback((keep = 0) => {
+    samplesRef.current = keep > 0 ? samplesRef.current.slice(-keep) : []
+  }, [])
+
   useEffect(() => () => {
     stop()
     detectorRef.current?.close()
   }, [stop])
 
-  return { latest, status, error, samplesRef, start, stop, clear }
+  return { latest, status, error, samplesRef, start, stop, clear, trimSamples }
 }
 

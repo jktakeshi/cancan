@@ -1,17 +1,55 @@
 import { useEffect, useRef } from 'react'
 import type { PoseSample } from './domain'
 import { poseAt, type ReferenceTrack } from './referenceTracking'
-import { drawSkeleton, prepareCanvas, videoContentRect } from './skeleton'
+import { drawSkeleton, prepareCanvas, videoContentRect, type ContentRect } from './skeleton'
 
 type RoleStyle = { id: string; label: string; color: string }
 
 type VideoRef = React.RefObject<HTMLVideoElement | null>
+
+/** The selected dancer's foot path for the phrase, with count numbers where each beat lands. */
+export type Trail = { color: string; points: { x: number; y: number }[]; marks: { point: { x: number; y: number }; label: string }[] }
+
+function drawTrail(ctx: CanvasRenderingContext2D, rect: ContentRect, trail: Trail) {
+  if (trail.points.length < 2) return
+  const px = (point: { x: number; y: number }) => [rect.left + point.x * rect.width, rect.top + point.y * rect.height] as const
+  ctx.save()
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.beginPath()
+  trail.points.forEach((point, index) => (index ? ctx.lineTo(...px(point)) : ctx.moveTo(...px(point))))
+  ctx.lineWidth = 6
+  ctx.strokeStyle = 'rgba(10, 10, 14, 0.6)'
+  ctx.stroke()
+  ctx.setLineDash([10, 7])
+  ctx.lineWidth = 3
+  ctx.strokeStyle = trail.color
+  ctx.stroke()
+  ctx.setLineDash([])
+  ctx.font = '800 11px Inter, ui-sans-serif, system-ui, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  for (const mark of trail.marks) {
+    const [x, y] = px(mark.point)
+    ctx.beginPath()
+    ctx.arc(x, y, 9, 0, Math.PI * 2)
+    ctx.fillStyle = trail.color
+    ctx.fill()
+    ctx.lineWidth = 2
+    ctx.strokeStyle = '#111'
+    ctx.stroke()
+    ctx.fillStyle = '#111'
+    ctx.fillText(mark.label, x, y + 0.5)
+  }
+  ctx.restore()
+}
 
 type ReferenceOverlayProps = {
   videoRef: VideoRef
   tracks: ReferenceTrack[]
   roles: RoleStyle[]
   selectedRoleId: string
+  trail?: Trail
   /** When set, the overlay captures clicks and reports the tracked dancer nearest the click. */
   onPickDancer?: (trackIndex: number) => void
 }
@@ -20,23 +58,24 @@ type ReferenceOverlayProps = {
  * Stick figures for every tracked dancer in the reference clip, redrawn every animation frame
  * from the video's own clock so they stay locked to playback, seeking, and slow motion.
  */
-export function ReferenceOverlay({ videoRef, tracks, roles, selectedRoleId, onPickDancer }: ReferenceOverlayProps) {
+export function ReferenceOverlay({ videoRef, tracks, roles, selectedRoleId, trail, onPickDancer }: ReferenceOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const propsRef = useRef({ tracks, roles, selectedRoleId })
-  useEffect(() => { propsRef.current = { tracks, roles, selectedRoleId } })
+  const propsRef = useRef({ tracks, roles, selectedRoleId, trail })
+  useEffect(() => { propsRef.current = { tracks, roles, selectedRoleId, trail } })
 
   useEffect(() => {
     let frame = 0
     const render = () => {
       frame = requestAnimationFrame(render)
       const canvas = canvasRef.current
-      const { tracks, roles, selectedRoleId } = propsRef.current
+      const { tracks, roles, selectedRoleId, trail } = propsRef.current
       const video = videoRef.current
       if (!canvas) return
       const ctx = prepareCanvas(canvas)
       if (!ctx || !video || !video.videoWidth) return
       const rect = videoContentRect(video)
       const time = video.currentTime
+      if (trail) drawTrail(ctx, rect, trail)
       const ordered = [...tracks].sort((a, b) => Number(a.id === selectedRoleId) - Number(b.id === selectedRoleId))
       for (const track of ordered) {
         const landmarks = poseAt(track, time)

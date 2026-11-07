@@ -1,0 +1,50 @@
+/* Functional layout for the learn/practice coach; visual design is intentionally minimal for now. */
+.coach { display: grid; gap: 14px; }
+.coach h2 { font-size: 20px; }
+.coach-learn, .coach-practice { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; }
+.coach-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.coach button { color: #e9e4ec; background: #29272e; border: 1px solid transparent; border-radius: 9px; padding: 8px 11px; font-size: 13px; }
+.coach button.on { border-color: #ffffff55; background: #3a3740; color: white; }
+.coach button.strong { background: #f5f1e8; color: #111; font-weight: 800; }
+.coach button:disabled { opacity: .4; cursor: not-allowed; }
+
+.solo { position: relative; }
+.solo-figure { width: 100%; aspect-ratio: 3 / 4; max-height: 460px; background: #08080a; border-radius: 13px; }
+.solo-count { position: absolute; top: 10px; left: 10px; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; background: #f5f1e8; color: #111; font-size: 22px; font-weight: 900; }
+
+.lessons { list-style: none; display: grid; gap: 6px; align-content: start; }
+.lessons button { width: 100%; display: flex; gap: 12px; align-items: baseline; text-align: left; padding: 10px 12px; background: #1f1d23; }
+.lessons b { min-width: 18px; font-size: 18px; }
+.lessons span { color: #cfc9d3; }
+.lessons li.active button { background: #34303a; border-color: #ffffff55; }
+.lessons li.hidden-dancer span { color: #77717c; font-style: italic; }
+.lesson-note { color: #77717c; font-size: 12px; padding: 4px 2px; }
+
+.practice-header { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 16px; border-top: 1px solid #ffffff18; }
+.webcam-stage { position: relative; aspect-ratio: 16 / 9; background: #08080a; border-radius: 13px; overflow: hidden; }
+.webcam-stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.webcam-empty { position: absolute; inset: 0; display: grid; place-items: center; color: #78727d; }
+.visibility { position: absolute; left: 10px; top: 10px; z-index: 3; padding: 6px 10px; border-radius: 8px; font-size: 13px; font-weight: 700; }
+.visibility.ok { background: #7df9d0; color: #111; }
+.visibility.warn { background: #ffc857; color: #111; }
+.big-count { position: absolute; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 110px; height: 110px; display: grid; place-items: center; border-radius: 50%; background: #f5f1e8ee; color: #111; font-size: 60px; font-weight: 900; }
+.big-count.live { left: auto; right: 12px; top: 12px; transform: none; width: 64px; height: 64px; font-size: 34px; }
+.recording { color: #ff718f; font-weight: 800; margin-top: 10px; }
+
+.take-panel { display: grid; align-content: start; gap: 4px; }
+.review { margin-top: 12px; display: grid; gap: 8px; }
+.review-head { display: flex; gap: 12px; align-items: center; }
+.score { min-width: 64px; height: 64px; display: grid; place-items: center; border-radius: 50%; font-size: 26px; color: #111; }
+.score.good, .count-scores i.good { background: #7df9d0; }
+.score.ok, .count-scores i.ok { background: #ffc857; }
+.score.bad, .count-scores i.bad { background: #ff718f; }
+.score.none { background: #555; }
+.review-line { color: #cfc9d3; }
+.count-scores { list-style: none; display: grid; gap: 4px; }
+.count-scores button { position: relative; width: 100%; display: flex; gap: 10px; align-items: center; text-align: left; overflow: hidden; background: #1f1d23; }
+.count-scores i { position: absolute; left: 0; bottom: 0; height: 3px; }
+.count-scores b { min-width: 16px; }
+.compare { display: grid; grid-template-columns: 160px 1fr; gap: 10px; align-items: center; }
+.compare-figure { width: 160px; height: 200px; background: #08080a; border-radius: 10px; grid-row: span 2; }
+
+@media (max-width: 900px) { .coach-learn, .coach-practice { grid-template-columns: 1fr; } }

@@ -71,6 +71,8 @@ export type SkeletonStyle = {
   label?: string
   /** Mirror horizontally inside the content rect (selfie view). */
   mirrored?: boolean
+  /** Overrides the default opacity (bold figures opaque, faint figures translucent). */
+  alpha?: number
 }
 
 export function drawSkeleton(ctx: CanvasRenderingContext2D, rawLandmarks: PoseLandmark[], rect: ContentRect, style: SkeletonStyle) {
@@ -92,7 +94,7 @@ export function drawSkeleton(ctx: CanvasRenderingContext2D, rawLandmarks: PoseLa
   const joint = Math.max(2.5, Math.min(8, torso * (style.emphasis ? 0.07 : 0.04)))
 
   ctx.save()
-  ctx.globalAlpha = style.emphasis ? 1 : 0.55
+  ctx.globalAlpha = style.alpha ?? (style.emphasis ? 1 : 0.55)
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
 
