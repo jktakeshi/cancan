@@ -161,7 +161,7 @@ export function Home({ rehearsals, onAdd, onOpen }: HomeProps) {
     </section>
 
     <footer className="home-footer text-caption text-muted">
-      <span>Dance Catch-up · Team hehe · Nova Hackathon 2026</span>
+      <span>CANCAN · Team hehe · Nova Hackathon 2026</span>
       <span>Videos stay on your device</span>
     </footer>
   </div>

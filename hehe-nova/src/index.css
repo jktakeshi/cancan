@@ -71,7 +71,7 @@
 
 body {
   min-height: 100vh;
-  background: var(--bg-canvas);
+  background: var(--bg-canvas) url('./assets/background.jpg') center top / cover fixed no-repeat;
 }
 
 img,
