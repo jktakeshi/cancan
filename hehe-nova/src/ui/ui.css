@@ -1,0 +1,205 @@
+/* Shared component styles matching the Components section of the Figma file. */
+
+/* Button */
+.ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  transition: filter 120ms, background-color 120ms;
+}
+.ui-button.is-large { height: 52px; padding: 0 24px; border-radius: var(--radius-lg); }
+.ui-button.is-medium { height: 44px; padding: 0 16px; border-radius: var(--radius-md); }
+.ui-button.is-primary { background: var(--accent-role); color: var(--text-on-accent); font: 600 16px/1.2 var(--font-body); }
+.ui-button.is-secondary { background: var(--bg-surface); border-color: var(--border-strong); color: var(--text-primary); font: 400 16px/1.5 var(--font-body); }
+.ui-button.is-block { width: 100%; }
+.ui-button.is-primary:hover:not(:disabled) { filter: brightness(1.08); }
+.ui-button.is-secondary:hover:not(:disabled) { background: var(--bg-raised); }
+.ui-button:disabled { opacity: 0.45; }
+.ui-button svg { flex: none; }
+
+/* Chip */
+.ui-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+.ui-chip.tone-accent { background: var(--accent-role); color: var(--text-on-accent); font: 600 13px/1.2 var(--font-body); }
+.ui-chip.tone-neutral { background: var(--bg-raised); color: var(--text-primary); font: 400 12px/1.4 var(--font-body); }
+.ui-chip .dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+
+/* Segmented control and Segment */
+.ui-segmented {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+.ui-segment {
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: 400 14px/1.45 var(--font-body);
+  white-space: nowrap;
+}
+.ui-segment:hover:not(:disabled) { color: var(--text-primary); }
+.ui-segment[aria-checked='true'] { background: var(--bg-active); color: var(--text-white); }
+.ui-segmented.small .ui-segment { height: 32px; padding: 0 12px; }
+
+/* Count cell */
+.ui-count-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 76px;
+  padding: 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  text-align: left;
+}
+.ui-count-cell .count { font: 500 13px/1.3 var(--font-mono); color: var(--text-muted); }
+.ui-count-cell .step { font: 400 12px/1.4 var(--font-body); color: var(--text-secondary); }
+.ui-count-cell.is-looped { background: var(--bg-raised); }
+.ui-count-cell.is-current { padding: 7px; border: 2px solid var(--accent-role); background: var(--bg-accent-tint); }
+.ui-count-cell.is-current .count { color: var(--accent-role); }
+.ui-count-cell.is-unclear .step { color: var(--text-muted); }
+
+/* Brand */
+.ui-brand { display: inline-flex; align-items: center; gap: 12px; color: var(--text-primary); text-decoration: none; }
+button.ui-brand { padding: 0; border: 0; background: none; }
+.ui-brand .mark { width: 32px; height: 32px; border-radius: var(--radius-sm); background: var(--accent-role); flex: none; }
+.ui-brand .name { font: 700 20px/1.3 var(--font-display); white-space: nowrap; }
+
+/* Score bar */
+.ui-score-bar { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.ui-score-bar .row { display: flex; justify-content: space-between; gap: 12px; }
+.ui-score-bar .label { font: 400 14px/1.45 var(--font-body); color: var(--text-primary); }
+.ui-score-bar .value { font: 500 13px/1.3 var(--font-mono); }
+.ui-score-bar .track { height: 8px; overflow: hidden; border-radius: var(--radius-pill); background: var(--border-subtle); }
+.ui-score-bar .fill { height: 100%; border-radius: var(--radius-pill); }
+.ui-score-bar .detail { font: 400 12px/1.4 var(--font-body); color: var(--text-muted); }
+.ui-score-bar.tone-good .value { color: var(--status-score-good); }
+.ui-score-bar.tone-good .fill { background: var(--status-score-good); }
+.ui-score-bar.tone-mid .value { color: var(--status-score-mid); }
+.ui-score-bar.tone-mid .fill { background: var(--status-score-mid); }
+.ui-score-bar.tone-low .value { color: var(--status-score-low); }
+.ui-score-bar.tone-low .fill { background: var(--status-score-low); }
+.ui-score-bar.tone-none .value { color: var(--text-muted); }
+
+/* Card shell shared by the phrase and video cards */
+.ui-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  text-align: left;
+}
+button.ui-card:hover:not(:disabled) { border-color: var(--border-strong); }
+.ui-card.is-selected, button.ui-card.is-selected:hover { border: 2px solid var(--accent-role); }
+
+/* Phrase card */
+.ui-phrase-card { gap: 12px; padding: 16px; border-radius: var(--radius-xl); }
+.ui-phrase-card.is-selected { padding: 15px; }
+.ui-phrase-card .title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ui-phrase-card .name { font: 700 18px/1.3 var(--font-display); }
+.ui-phrase-card .counts { font: 500 12px/1.3 var(--font-mono); color: var(--text-muted); }
+.ui-phrase-card .description { font: 400 14px/1.45 var(--font-body); color: var(--text-muted); }
+.ui-phrase-card .footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 25px; }
+
+/* Formation mini map. Coordinates are drawn in a 100 by 40 viewBox with upstage at the top. */
+.ui-formation-map { position: relative; height: 110px; overflow: hidden; border-radius: var(--radius-md); background: var(--bg-stage); }
+.ui-formation-map .edge { position: absolute; left: 8px; top: 6px; font: 400 11px/1.4 var(--font-body); color: var(--text-muted); text-transform: uppercase; }
+.ui-formation-map svg { width: 100%; height: 100%; }
+.ui-formation-map .map-empty { display: grid; place-items: center; height: 100%; font: 400 12px/1.4 var(--font-body); color: var(--text-muted); }
+
+/* Video card */
+.ui-video-card { overflow: hidden; border-radius: var(--radius-2xl); }
+.ui-video-card .thumbnail { position: relative; aspect-ratio: 16 / 9; overflow: hidden; background: var(--bg-stage); }
+.ui-video-card .thumbnail video,
+.ui-video-card .thumbnail img { width: 100%; height: 100%; object-fit: cover; }
+.ui-video-card .overlay-tag {
+  position: absolute;
+  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+}
+.ui-video-card .overlay-tag.top-left { top: 10px; left: 10px; color: var(--text-muted); font: 400 12px/1.4 var(--font-body); }
+.ui-video-card .overlay-tag.bottom-right { right: 8px; bottom: 10px; font: 500 12px/1.3 var(--font-mono); }
+.ui-video-card .thumbnail .ui-chip { position: absolute; left: 10px; bottom: 10px; }
+.ui-video-card .body { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
+.ui-video-card .title { font: 700 18px/1.3 var(--font-display); }
+.ui-video-card .meta { font: 400 13px/1.4 var(--font-body); color: var(--text-muted); }
+.ui-video-card .next { font: 400 13px/1.4 var(--font-body); color: var(--text-secondary); }
+
+/* Phrase progress strip, one segment per phrase */
+.ui-phrase-progress { display: flex; gap: 3px; }
+.ui-phrase-progress span { flex: 1 0 0; min-width: 1px; height: 8px; border-radius: 3px; background: var(--border-default); }
+.ui-phrase-progress .solid { background: var(--status-solid); }
+.ui-phrase-progress .progress { background: var(--status-progress); }
+.ui-phrase-progress .weak { background: var(--accent-role); }
+
+/* Step card */
+.ui-step-card { display: flex; flex-direction: column; gap: 10px; padding: 22px; border: 1px solid var(--border-subtle); border-radius: var(--radius-2xl); }
+.ui-step-card .number { font: 500 14px/1.3 var(--font-mono); color: var(--accent-role); }
+.ui-step-card .title { font: 700 20px/1.3 var(--font-display); color: var(--text-primary); }
+.ui-step-card .description { font: 400 15px/1.5 var(--font-body); color: var(--text-muted); }
+
+/* Text field */
+.ui-text-field { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.ui-text-field .label { font: 400 14px/1.45 var(--font-body); color: var(--text-secondary); }
+.ui-text-field input {
+  height: 46px;
+  padding: 0 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font: 400 15px/1.5 var(--font-body);
+}
+.ui-text-field input::placeholder { color: var(--text-muted); }
+.ui-text-field input:focus { border-color: var(--border-strong); outline: none; }
+.ui-text-field .hint { font: 400 12px/1.4 var(--font-body); color: var(--text-muted); }
+
+/* Scrubber. The handle is the Figma scrubber handle asset. */
+.ui-scrubber { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--border-subtle); background: var(--bg-surface); }
+.ui-scrubber .times { display: flex; align-items: center; gap: 10px; font: 500 12px/1.3 var(--font-mono); color: var(--text-muted); }
+.ui-scrubber .spacer { flex: 1; }
+.ui-scrubber .play { padding: 2px 8px; border: 1px solid var(--border-default); border-radius: var(--radius-xs); background: var(--bg-raised); color: var(--text-secondary); font: inherit; }
+.ui-scrubber input[type='range'] {
+  width: 100%;
+  height: 14px;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  cursor: pointer;
+}
+.ui-scrubber input[type='range']::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(to right, var(--accent-role) var(--progress, 0%), var(--border-subtle) var(--progress, 0%));
+}
+.ui-scrubber input[type='range']::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -4px;
+  border: 0;
+  background: url('../assets/scrubHandle.svg') center / 14px 14px no-repeat;
+  appearance: none;
+}
+.ui-scrubber input[type='range']::-moz-range-track { height: 6px; border-radius: var(--radius-pill); background: var(--border-subtle); }
+.ui-scrubber input[type='range']::-moz-range-progress { height: 6px; border-radius: var(--radius-pill); background: var(--accent-role); }
+.ui-scrubber input[type='range']::-moz-range-thumb { width: 14px; height: 14px; border: 0; background: url('../assets/scrubHandle.svg') center / 14px 14px no-repeat; }

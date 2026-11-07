@@ -197,7 +197,8 @@ export function moveInstruction(actual: FloorPoint, target: FloorPoint): string 
   return parts.length ? `Move ${parts.join(' and ')}` : null
 }
 
-export type CountPosition = { count: number; errorM: number | null; instruction: string | null }
+/** `actual` and `target` are learner floor meters, kept so the result can be drawn on a map. */
+export type CountPosition = { count: number; errorM: number | null; instruction: string | null; actual?: FloorPoint; target?: FloorPoint }
 
 /**
  * Where the learner stood on each count compared with where they should have been.
@@ -214,6 +215,6 @@ export function reviewPositions(samples: PoseSample[], phrase: Phrase, learnerCa
     const actual = average(spots)
     const target = targetAt(mark.timeSec)
     if (!actual || !target) return { count: mark.count, errorM: null, instruction: null }
-    return { count: mark.count, errorM: Math.hypot(target.x - actual.x, target.z - actual.z), instruction: moveInstruction(actual, target) }
+    return { count: mark.count, errorM: Math.hypot(target.x - actual.x, target.z - actual.z), instruction: moveInstruction(actual, target), actual, target }
   })
 }

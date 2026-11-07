@@ -12,6 +12,8 @@ type RadarProps = {
   referenceCamera: Camera
   /** Learner-room mapping; without it the radar shows the reference stage relative to the role's start. */
   mapping: FloorMapping | null
+  /** Draw the learner's left on the left, like the mirrored webcam. False keeps the audience view. Defaults to true. */
+  mirrored?: boolean
   learnerSpot: FloorPoint | null
 }
 
@@ -19,11 +21,11 @@ type RadarProps = {
  * Top-down floor map. The front (camera) is at the bottom, and it is mirrored so the learner's
  * left is on the left, matching the mirrored webcam view.
  */
-export function FloorRadar({ videoRef, phrase, self, others, referenceCamera, mapping, learnerSpot }: RadarProps) {
+export function FloorRadar({ videoRef, phrase, self, others, referenceCamera, mapping, learnerSpot, mirrored = true }: RadarProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const path = useMemo(() => rolePath(self.track, phrase, referenceCamera), [self.track, phrase, referenceCamera])
-  const propsRef = useRef({ others, mapping, learnerSpot, path, self })
-  useEffect(() => { propsRef.current = { others, mapping, learnerSpot, path, self } })
+  const propsRef = useRef({ others, mapping, learnerSpot, path, self, mirrored })
+  useEffect(() => { propsRef.current = { others, mapping, learnerSpot, path, self, mirrored } })
 
   useEffect(() => {
     let frame = 0
@@ -34,7 +36,7 @@ export function FloorRadar({ videoRef, phrase, self, others, referenceCamera, ma
       if (!canvas || !video) return
       const ctx = prepareCanvas(canvas)
       if (!ctx) return
-      const { others, mapping, learnerSpot, path, self } = propsRef.current
+      const { others, mapping, learnerSpot, path, self, mirrored } = propsRef.current
       const origin = path[0]?.point
       if (!origin) return
       const map = mapping ?? { anchor: origin, origin, scale: 1 }
@@ -57,8 +59,8 @@ export function FloorRadar({ videoRef, phrase, self, others, referenceCamera, ma
       const w = canvas.clientWidth
       const h = canvas.clientHeight
       const k = Math.min(w, h - 18) / span
-      // Mirrored: camera-right (+x, the learner's left) is drawn on the left.
-      const at = (p: FloorPoint) => ({ x: w / 2 - (p.x - cx) * k, y: (h - 18) / 2 - (p.z - cz) * k })
+      // Mirrored: camera-right (+x, the learner's left) is drawn on the left. Otherwise camera-right stays on the right, as the audience sees it.
+      const at = (p: FloorPoint) => ({ x: w / 2 + (mirrored ? -1 : 1) * (p.x - cx) * k, y: (h - 18) / 2 - (p.z - cz) * k })
 
       ctx.strokeStyle = '#ffffff14'
       ctx.lineWidth = 1

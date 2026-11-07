@@ -1,0 +1,55 @@
+.pick-phrase { min-height: 100vh; display: flex; flex-direction: column; }
+.pick-phrase-learning-as { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; }
+.pick-phrase-content { display: flex; flex-direction: column; gap: 12px; padding: 40px 80px; }
+.pick-phrase-title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.pick-phrase-title { display: flex; flex-direction: column; gap: 8px; }
+
+.pick-phrase-notice {
+  padding: 12px 14px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
+  font: 400 14px/1.45 var(--font-body);
+}
+
+.pick-phrase-ruler {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--bg-surface);
+}
+.pick-phrase-ruler .ticks { display: flex; justify-content: space-between; }
+.pick-phrase-ruler .segments { display: flex; gap: 4px; }
+.pick-phrase-ruler .segment {
+  flex: 1 0 0;
+  min-width: 1px;
+  height: 36px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-xs);
+  background: var(--border-default);
+}
+.pick-phrase-ruler .segment:hover { background: var(--border-strong); }
+.pick-phrase-ruler .segment.is-selected { border-color: var(--accent-role); }
+.pick-phrase-ruler .legend { display: flex; gap: 18px; flex-wrap: wrap; }
+
+.pick-phrase-adjust summary { cursor: pointer; color: var(--text-secondary); font: 400 13px/1.4 var(--font-body); }
+.pick-phrase-adjust[open] summary { margin-bottom: 8px; }
+.pick-phrase-adjust .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+.pick-phrase-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; margin-top: 12px; }
+.pick-phrase-grid .ui-phrase-card { background: var(--bg-raised); }
+
+@media (max-width: 1100px) {
+  .pick-phrase-content { padding: 32px 40px; }
+}
+@media (max-width: 720px) {
+  .pick-phrase-content { padding: 24px 16px; }
+  .pick-phrase-ruler .ticks span:not(:first-child):not(:last-child) { display: none; }
+}
+
+.pick-phrase-shortcuts { display: flex; gap: 10px; flex-wrap: wrap; }
+.pick-phrase-ruler .segment.status-solid { background: var(--status-solid); }
+.pick-phrase-ruler .segment.status-progress { background: var(--status-progress); }
