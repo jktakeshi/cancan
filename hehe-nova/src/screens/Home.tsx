@@ -138,15 +138,12 @@ export function Home({ rehearsals, onAdd, onOpen }: HomeProps) {
       <div className="home-how">
         <h2 className="text-h2">How it works</h2>
         <ol className="home-steps">
-          {steps.map((title, index) => <li key={title} className="contents">
-            {index === 4 && <div className="home-loop" aria-label="Steps 4 and 5 repeat">
-              <span className="home-loop-icon"><img src={iconRefresh} width={18} height={18} alt="" /></span>
-              <span className="text-micro text-muted">Loop steps 4 &amp; 5</span>
-            </div>}
-            <div className="home-step">
-              <span className="text-mono-small text-accent">{String(index + 1).padStart(2, '0')}</span>
-              <span className="home-step-title">{title}</span>
-            </div>
+          {steps.map((title, index) => <li key={title} className="home-step">
+            {index === 4 && <span className="home-loop-icon" role="img" aria-label="Steps 4 and 5 repeat" title="Steps 4 and 5 repeat">
+              <img src={iconRefresh} width={18} height={18} alt="" />
+            </span>}
+            <span className="text-mono-small text-accent">{String(index + 1).padStart(2, '0')}</span>
+            <span className="home-step-title">{title}</span>
           </li>)}
         </ol>
       </div>
